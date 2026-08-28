@@ -68,6 +68,7 @@ jobs:
               "/api/assets",
               "/api/defaults",
               "/api/demo/simulate-drop",
+              "/api/market/eth-price",
           }
           actual = set(app.openapi()["paths"])
           missing = expected - actual

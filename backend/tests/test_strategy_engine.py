@@ -492,3 +492,61 @@ def test_decision_serialises_to_json_safe_primitives():
     payload = json.dumps(decision.to_dict())
     assert "PROTECTING" in payload
     assert "EXECUTED" in payload
+
+
+# ---------------------------------------------------------------------------
+# Executed amounts must land at or above target, not a hair below
+# ---------------------------------------------------------------------------
+
+REAL_PRICE = Position(collateral_amount=4.0, collateral_price=2445.16, debt_amount=6000.0)
+
+
+def test_executing_the_displayed_amount_meets_the_target():
+    """Regression: action_amount is what execution acts on, so rounding it to
+    the nearest cent used to land the position just under target -- reporting
+    HF 1.500 while classifying it WARNING. Only visible with a real market
+    price; the round $3,000 demo number hid it entirely."""
+    market = MarketConditions(eth_price=2445.16)
+    decision = strategy_engine.evaluate(REAL_PRICE, PREFS, market)
+    best = decision.selected_strategy
+    assert best is not None
+
+    after = strategy_engine.apply_strategy(REAL_PRICE, best)
+    achieved = risk_engine.health_factor(after)
+
+    assert achieved >= PREFS.target_health_factor
+    assert risk_engine.classify_risk(achieved) is RiskLevel.SAFE
+    # And the card's number is the number execution produces.
+    assert best.resulting_health_factor == pytest.approx(achieved, abs=1e-4)
+
+
+@pytest.mark.parametrize("price", [2445.16, 1873.41, 3291.07, 999.99, 4444.44])
+def test_every_viable_strategy_lands_at_or_above_target_at_any_price(price):
+    position = Position(collateral_amount=4.0, collateral_price=price, debt_amount=6000.0)
+    prefs = RiskPreferences(available_capital=50_000.0)
+    market = MarketConditions(eth_price=price)
+
+    for s in strategy_engine.generate(position, prefs, market):
+        if not s.is_executable:
+            continue
+        achieved = risk_engine.health_factor(strategy_engine.apply_strategy(position, s))
+        assert achieved >= prefs.target_health_factor, f"{s.name} at {price} landed at {achieved}"
+
+
+def test_action_amounts_are_whole_cents():
+    market = MarketConditions(eth_price=2445.16)
+    for s in strategy_engine.generate(REAL_PRICE, PREFS, market):
+        cents = s.action_amount * 100
+        assert abs(cents - round(cents)) < 1e-6, f"{s.name}: {s.action_amount}"
+
+
+def test_rounding_up_never_overshoots_by_more_than_a_cent():
+    """The safety margin must stay negligible -- this is a rounding fix, not a
+    licence to over-repay."""
+    exact = risk_engine.minimum_repayment_to_target(REAL_PRICE, PREFS.target_health_factor)
+    market = MarketConditions(eth_price=2445.16)
+    repay = next(
+        s for s in strategy_engine.generate(REAL_PRICE, PREFS, market)
+        if s.strategy_type is StrategyType.REPAY_DEBT
+    )
+    assert 0 <= repay.action_amount - exact < 0.01

@@ -20,6 +20,7 @@ oracle, a DEX quoter and the real Aave premium is a per-function change.
 
 from __future__ import annotations
 
+import math
 from typing import Dict, List, Optional, Tuple
 
 from ..models.domain import (
@@ -66,6 +67,23 @@ PARTIAL_DEBT_FRACTION = 0.10
 
 # Health Factor tolerance when checking whether a strategy hit its target.
 HF_TOLERANCE = 1e-6
+
+
+def _ceil_cents(amount: float) -> float:
+    """Round an action amount UP to the nearest cent.
+
+    Execution acts on the amount the UI displays, so this cannot be a
+    round-to-nearest. Rounding down lands the position a hair BELOW the target:
+    with a real market price of $2,445.16 the exact repayment is $1,924.7333,
+    and repaying the rounded $1,924.73 yields HF 1.4999987 -- which the UI
+    reports as "1.500" while classifying it WARNING. Rounding up costs at most
+    one cent and guarantees the executed rescue meets or beats the target.
+
+    Every amount is derived from this rounded figure rather than the exact one,
+    so the Health Factor shown on the card is the Health Factor execution
+    actually produces.
+    """
+    return math.ceil(amount * 100) / 100
 
 SKIP_UNECONOMICAL = "Rescue skipped – economically unviable."
 SKIP_INSUFFICIENT_LIQUIDITY = "Rescue skipped – insufficient liquidity."
@@ -207,7 +225,7 @@ def _repay_debt(
     position: Position, prefs: RiskPreferences, market: MarketConditions
 ) -> Strategy:
     target = prefs.target_health_factor
-    repayment = risk_engine.minimum_repayment_to_target(position, target)
+    repayment = _ceil_cents(risk_engine.minimum_repayment_to_target(position, target))
     after = risk_engine.apply_repayment(position, repayment)
     hf_after = risk_engine.health_factor(after)
     gas = estimate_gas_cost(StrategyType.REPAY_DEBT, market)
@@ -238,7 +256,7 @@ def _add_collateral(
     position: Position, prefs: RiskPreferences, market: MarketConditions
 ) -> Strategy:
     target = prefs.target_health_factor
-    topup = risk_engine.minimum_collateral_topup_to_target(position, target)
+    topup = _ceil_cents(risk_engine.minimum_collateral_topup_to_target(position, target))
     after = risk_engine.apply_collateral_topup(position, topup)
     hf_after = risk_engine.health_factor(after)
     gas = estimate_gas_cost(StrategyType.ADD_COLLATERAL, market)
@@ -281,6 +299,7 @@ def _collateral_swap(
         )
 
     repayment, slippage_pct = solved
+    repayment = _ceil_cents(repayment)
     trade = repayment * (1.0 + slippage_pct / 100.0)
     after = risk_engine.apply_collateral_swap(position, repayment, slippage_pct)
     hf_after = risk_engine.health_factor(after)
@@ -324,6 +343,7 @@ def _flash_loan_deleverage(
         )
 
     repayment, slippage_pct = solved
+    repayment = _ceil_cents(repayment)
     trade = repayment * (1.0 + slippage_pct / 100.0)
     after = risk_engine.apply_collateral_swap(position, repayment, slippage_pct)
     hf_after = risk_engine.health_factor(after)

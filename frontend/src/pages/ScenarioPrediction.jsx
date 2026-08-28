@@ -69,7 +69,7 @@ export default function ScenarioPrediction() {
   return (
     <div className="flex flex-col gap-5">
       <Panel
-        title="Scenario prediction"
+        title="Simulated price scenarios"
         subtitle={scenarioSummary}
         actions={
           breakingScenario ? (
@@ -181,12 +181,17 @@ export default function ScenarioPrediction() {
         </div>
 
         <p className="mt-3 text-xs leading-relaxed text-muted">
+          Scenario projections based on the current {position.collateral_asset} market price.
           Scenario simulation shows how the position could behave under different market
-          conditions. These are simulated scenarios, not guaranteed predictions.
+          conditions — these are simulated stress tests, not guaranteed predictions, and
+          nothing here forecasts where the price will actually go.
         </p>
       </Panel>
 
-      <Panel title="Projected interventions" subtitle="Sized at each rung, before the move happens.">
+      <Panel
+        title="Projected interventions"
+        subtitle="Sized at each simulated rung, before any such move happens."
+      >
         <div className="-mx-4 overflow-x-auto px-4">
           <table className="w-full min-w-[860px] border-collapse text-sm">
             <thead>

@@ -60,6 +60,15 @@ export const api = {
   defaults: () => request('/defaults'),
   assets: () => request('/assets'),
 
+  /**
+   * The live ETH/USD spot price.
+   *
+   * The ONLY real-world data in the system, and it is fetched here rather than
+   * in a component so no browser ever talks to a market API directly. The
+   * backend owns the providers, the timeout handling and the rate limiting.
+   */
+  ethPrice: (refresh = false) => request(`/market/eth-price${refresh ? '?refresh=true' : ''}`),
+
   analyze: (body) => request('/position/analyze', { method: 'POST', body }),
   simulateScenarios: (body) => request('/scenario/simulate', { method: 'POST', body }),
   generateStrategies: (body) => request('/strategies/generate', { method: 'POST', body }),

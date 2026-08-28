@@ -30,6 +30,7 @@
 | **What it does** | Watches a DeFi borrow position, predicts how it behaves under future price shocks, generates and scores several rescue strategies, and executes the best one autonomously |
 | **Stack** | React 19 · Vite · Tailwind v4 · Recharts · FastAPI · Python 3.13+ · Supabase (optional) |
 | **Tests** | 238, covering the engines, the API and all eight edge cases |
+| **Market data** | **Real** ETH/USD spot price from public APIs — see [Market data](#market-data) |
 | **Blockchain** | **None.** Fully simulated — see [What is simulated](#what-is-simulated) |
 | **Run it** | [Quick start](#quick-start) — two terminals, no credentials needed |
 
@@ -281,8 +282,9 @@ elsewhere.
 cd backend && python -m pytest
 ```
 
-238 tests: the risk, scenario, strategy and agent-cycle engines, the asset
-catalogue, user-entered positions, and every HTTP endpoint.
+284 tests: the risk, scenario, strategy and agent-cycle engines, the market-data
+service (fully mocked -- no test touches the internet), the asset catalogue,
+user-entered positions, and every HTTP endpoint.
 Edge cases 1–8 each have named tests — see the map at the top of
 `backend/tests/test_strategy_engine.py`.
 
@@ -353,6 +355,70 @@ liquidation line, not at it.
 
 > Scenario simulation shows how the position could behave under different market
 > conditions. These are simulated scenarios, not guaranteed predictions.
+
+## Market data
+
+The current **ETH/USD spot price is real**. It is read from public,
+keyless market-data APIs by `backend/app/services/market_data.py` and served
+to the frontend through `GET /api/market/eth-price`.
+
+| | |
+| --- | --- |
+| **Providers** | Coinbase → CoinGecko → Kraken, tried in order |
+| **Credentials** | None. All three are free and keyless, so there is no secret that could leak |
+| **Timeout** | 5s per provider, then fall through to the next |
+| **Caching** | 60s TTL shared by every caller; a forced refresh is floored at 5s |
+| **Validation** | Non-numeric, null, zero, negative, NaN, infinite and implausible values are all treated as a failed read |
+
+### What is real and what is not
+
+| Real | Simulated |
+| --- | --- |
+| Current ETH/USD spot price | Every price derived from it (−5/−10/−15/−20%) |
+| The timestamp it was read at | Every projected Health Factor |
+| The provider it came from | Every protection strategy and its costing |
+| | The rescue execution and its receipt |
+
+**The scenario engine stress-tests a position; it does not forecast.** A −20%
+rung is a "what if", not a claim about where ETH is going. Nothing in this
+system predicts future prices, and no part of the UI says otherwise.
+
+### How real data flows
+
+```
+React  ──►  FastAPI  ──►  market_data.py  ──►  public price API
+  ▲                            │
+  │                           real ETH/USD spot price
+  │                            ▼
+  └──── dashboard ◄──── Risk Engine ──► Scenario Engine ──► Strategy Engine ──► Supabase
+```
+
+The browser never calls a market API directly. It only ever talks to the
+backend, which owns the providers, the timeouts and the rate limiting.
+
+### When the market is unreachable
+
+The application does not crash and does not invent a price. The panel shows
+**"Live market data unavailable."**, the price in use is relabelled
+**"Demo / manual price"**, and the user carries on with a manually entered
+figure — the risk, scenario and strategy engines behave identically either way.
+Verified by test and in the browser.
+
+### Refreshing
+
+**Refresh ETH price** on the dashboard re-reads the price, recalculates the
+Health Factor and re-runs the scenarios. It is rate-limited server-side, so
+holding down the button produces at most one upstream request every five
+seconds rather than one per click.
+
+### Demo Mode with live prices
+
+**Simulate 10% ETH drop** never changes the real market price. It takes the
+position's current price — the live one, if you analysed with live pricing —
+and stress-tests at `price × 0.90`. Verified: with a live price of $2,448.07
+the demo ran the cycle at $2,203.
+
+---
 
 ### Supported assets
 
@@ -448,11 +514,12 @@ hack/
 │   │   └── services/
 │   │       ├── agent_cycle.py         one full cycle: shock -> decide -> execute -> trace
 │   │       ├── assets.py              collateral catalogue and market tiers
+│   │       ├── market_data.py         REAL ETH/USD price, public keyless APIs
 │   │       ├── risk_engine.py         Health Factor, classification, sizing formulas
 │   │       ├── scenario_engine.py     price-shock ladder + projections
 │   │       ├── strategy_engine.py     generation, costing, scoring, selection
 │   │       └── repository.py          Supabase / in-memory persistence
-│   ├── tests/                         238 tests across engines and API
+│   ├── tests/                         284 tests across engines and API
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
@@ -523,6 +590,7 @@ Two rules hold this together:
 | POST | `/api/rescue/autoexecute` | Simulated autonomous execution |
 | POST | `/api/demo/simulate-drop` | One full agent cycle, server-side: shock, recalc, generate, score, select, execute, trace |
 | GET | `/api/history` | Executed rescues, newest first |
+| GET | `/api/market/eth-price` | **Real** ETH/USD spot price. `?refresh=true` bypasses the cache |
 | GET | `/api/assets` | Collateral catalogue with the simulated market parameters |
 | GET | `/api/defaults` | Seed position/preferences/market for the UI bootstrap |
 
@@ -654,7 +722,8 @@ confused. Writes are best-effort: a logging failure never takes down a rescue.
 | Repayment / top-up / deleverage sizing | **Real formulas**, derived in the docstrings |
 | Strategy generation, scoring, selection | **Real logic** |
 | Economic viability and constraint checks | **Real logic** |
-| ETH price | Simulated — a number you set, no oracle |
+| ETH spot price | **REAL** — public market API, see [Market data](#market-data) |
+| Scenario prices (−5/−10/−15/−20%) | Simulated projections derived from the real price |
 | Gas price | Simulated — `gas_units × gwei × price`, no gas oracle |
 | DEX liquidity and slippage | Simulated — constant-product shape, no pool query |
 | Flash loan | Simulated — the Aave v3 0.09% premium as arithmetic only |
@@ -738,8 +807,11 @@ infrastructure, not rewrites.
   demo user id.
 - One collateral and one debt asset per position. Real accounts hold baskets,
   and a real Health Factor sums each reserve at its own threshold.
-- Asset prices are typed in, not fetched. There is no oracle, so nothing stops
-  you entering an ETH price of $9.
+- Only ETH has a live price. Every other asset uses the figure you type, and
+  nothing stops you entering a BTC price of $9.
+- The live price is a spot read, not an oracle. A real protocol values
+  collateral with a lagging oracle, so its view of your Health Factor can
+  differ from spot for a few blocks.
 - Scenarios are deterministic instantaneous shocks with no probability
   attached. A production version would layer on a stochastic path model.
 - Execution risk is modelled as a fixed per-strategy discount, not derived from

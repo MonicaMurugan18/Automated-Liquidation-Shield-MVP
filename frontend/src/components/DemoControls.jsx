@@ -26,7 +26,7 @@ export default function DemoControls() {
   return (
     <div className="flex flex-col gap-2.5 rounded-lg border border-hairline bg-panel p-3">
       <p className="font-display text-[10px] tracking-[0.16em] text-muted uppercase">
-        Demo mode
+        Demo scenario: ETH -{demoDropPct}%
       </p>
 
       <Button variant="primary" onClick={runDemo} disabled={demoRunning || busy}>
@@ -52,6 +52,12 @@ export default function DemoControls() {
         {preferences?.mode === 'ADVISORY'
           ? 'Advisory mode: the agent stops at the recommendation.'
           : 'Autonomous mode: the agent executes without asking.'}
+      </p>
+
+      <p className="text-[11px] leading-snug text-muted">
+        Stress-tests the position at{' '}
+        <span className="tabular text-ink">current price × 0.{100 - demoDropPct}</span>. The real
+        market price is not changed.
       </p>
 
       {traceSteps.length > 0 && (

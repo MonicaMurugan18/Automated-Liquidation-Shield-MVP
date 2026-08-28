@@ -39,7 +39,14 @@ from ..schemas.api import (
     StrategyRequest,
     ValidationResponse,
 )
-from ..services import agent_cycle, assets, risk_engine, scenario_engine, strategy_engine
+from ..services import (
+    agent_cycle,
+    assets,
+    market_data,
+    risk_engine,
+    scenario_engine,
+    strategy_engine,
+)
 from ..services.repository import get_repository
 
 router = APIRouter()
@@ -482,6 +489,38 @@ def simulate_drop(request: CycleRequest) -> Dict[str, Any]:
 def history(limit: int = Query(default=50, ge=1, le=200)) -> HistoryResponse:
     repo = get_repository()
     return HistoryResponse(transactions=repo.list_rescues(limit), persistence=repo.backend_name)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/market/eth-price -- the one endpoint that reads real-world data
+# ---------------------------------------------------------------------------
+
+@router.get("/market/eth-price")
+def eth_price(refresh: bool = Query(default=False)) -> Dict[str, Any]:
+    """Current ETH/USD spot price from a public market-data provider.
+
+    This is the only REAL data in the system. Everything derived from it --
+    the -5/-10/-15/-20% scenarios, the projected Health Factors, the
+    strategies, the execution -- remains simulated.
+
+    `refresh=true` bypasses the cache for a user-initiated refresh. It is still
+    floored by a minimum interval so the public API cannot be hammered.
+
+    Returns 503 when every provider fails. That is not fatal: the client falls
+    back to a manual price and labels it as such.
+    """
+    try:
+        price = market_data.fetch_price(force=refresh)
+    except market_data.MarketDataUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    payload = price.to_dict()
+    payload["is_simulated"] = False
+    payload["note"] = (
+        "Live spot price. Scenario prices derived from it are simulated "
+        "projections, not forecasts."
+    )
+    return payload
 
 
 # ---------------------------------------------------------------------------

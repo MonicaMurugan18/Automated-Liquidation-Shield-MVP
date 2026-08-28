@@ -70,6 +70,20 @@ export function ShieldProvider({ children }) {
   const [persistence, setPersistence] = useState('unknown')
   const [systemHealth, setSystemHealth] = useState(null)
 
+  /**
+   * Live market price state.
+   *
+   * `marketStatus` is the single source of truth for how the ETH price on
+   * screen was obtained:
+   *   'idle'        nothing fetched yet
+   *   'loading'     a request is in flight
+   *   'live'        a real spot price from a public provider
+   *   'unavailable' every provider failed; the user is on a manual price
+   */
+  const [livePrice, setLivePrice] = useState(null)
+  const [marketStatus, setMarketStatus] = useState('idle')
+  const [marketError, setMarketError] = useState(null)
+
   const [shieldState, setShieldState] = useState('ARMED')
   const [lastRescue, setLastRescue] = useState(null)
   const [decisionTrace, setDecisionTrace] = useState(null)
@@ -142,6 +156,29 @@ export function ShieldProvider({ children }) {
     [payloadFor],
   )
 
+  /**
+   * Read the live ETH/USD price through the backend.
+   *
+   * Never fatal: a market outage leaves the user on a manual price rather than
+   * breaking the dashboard, which is why this swallows its own error into
+   * `marketStatus` instead of throwing.
+   */
+  const fetchLivePrice = useCallback(async ({ force = false } = {}) => {
+    setMarketStatus('loading')
+    setMarketError(null)
+    try {
+      const price = await api.ethPrice(force)
+      setLivePrice(price)
+      setMarketStatus('live')
+      return price
+    } catch (err) {
+      setLivePrice(null)
+      setMarketStatus('unavailable')
+      setMarketError(err.message || 'Live market data unavailable.')
+      return null
+    }
+  }, [])
+
   const refreshHistory = useCallback(async () => {
     try {
       const result = await api.history()
@@ -175,11 +212,14 @@ export function ShieldProvider({ children }) {
       })
       await refreshHistory()
       setBooted(true)
+      // Fired after boot completes on purpose: a market outage must not delay
+      // or fail the dashboard.
+      fetchLivePrice()
     } catch (err) {
       setSystemHealth(null)
       setBootError(err.message)
     }
-  }, [evaluate, refreshHistory])
+  }, [evaluate, refreshHistory, fetchLivePrice])
 
   useEffect(() => {
     boot()
@@ -500,6 +540,10 @@ export function ShieldProvider({ children }) {
       history,
       persistence,
       systemHealth,
+      livePrice,
+      marketStatus,
+      marketError,
+      fetchLivePrice,
       shieldState,
       lastRescue,
       decisionTrace,
@@ -526,7 +570,8 @@ export function ShieldProvider({ children }) {
       booted, bootError, error, busy, activity, position, basePosition, preferences,
       market, bands, assessment, scenarios, scenarioSummary, breakingScenario, thresholds,
       strategies, selectedStrategy, explanation, weights, validation, history,
-      persistence, systemHealth, shieldState, lastRescue, decisionTrace, lastCycle, traceSteps, demoRunning,
+      persistence, systemHealth, livePrice, marketStatus, marketError, fetchLivePrice,
+      shieldState, lastRescue, decisionTrace, lastCycle, traceSteps, demoRunning,
       assetCatalogue, collateralSpec, demoPosition, analysing, boot, applyPosition, applyPreferences,
       applyMarket, resetPosition, executeRescue, runDemo, analysePosition,
       loadDemoPosition,

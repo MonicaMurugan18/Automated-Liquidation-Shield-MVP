@@ -4,10 +4,13 @@ uvicorn[standard]==0.52.4
 pydantic==2.13.4
 python-dotenv==1.2.3
 
+# Market data. Used by services/market_data.py to read the live ETH/USD spot
+# price from public, keyless providers. Runtime dependency, not just a test one.
+httpx==0.28.1
+
 # Optional: only imported when SUPABASE_URL / SUPABASE_SERVICE_KEY are set.
 # The app runs without it, falling back to in-memory persistence.
 supabase==2.31.0
 
 # development
 pytest==9.1.1
-httpx==0.28.1

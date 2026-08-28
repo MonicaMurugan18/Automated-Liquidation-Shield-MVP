@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Loader2, PlayCircle, Search } from 'lucide-react'
+import { Loader2, PlayCircle, RadioTower, RefreshCw, Search } from 'lucide-react'
 import { useShield } from '../state/ShieldContext'
-import { Button, Field, NumberInput, Panel, Select } from './ui'
+import { Badge, Button, Field, NumberInput, Panel, Select } from './ui'
+import { fmtPrice } from '../lib/format'
 
 /**
  * "Analyze Your Position" -- the entry point for a user's own position.
@@ -75,8 +76,18 @@ const FIELD_ORDER = [
 ]
 
 export default function PositionForm() {
-  const { assetCatalogue, analysePosition, loadDemoPosition, analysing, busy, demoPosition } =
-    useShield()
+  const {
+    assetCatalogue,
+    analysePosition,
+    loadDemoPosition,
+    analysing,
+    busy,
+    demoPosition,
+    livePrice,
+    marketStatus,
+    fetchLivePrice,
+  } = useShield()
+  const [useLivePrice, setUseLivePrice] = useState(true)
   const [values, setValues] = useState(BLANK_FIELDS)
   const [errors, setErrors] = useState({})
   const [touched, setTouched] = useState(false)
@@ -111,6 +122,16 @@ export default function PositionForm() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spec])
+
+  // Mirror the live price into the form while "use live price" is on. The
+  // field stays a plain input -- switching the toggle off hands control back
+  // with the last live figure already in place, so nothing is lost.
+  const liveEth = marketStatus === 'live' && values.collateral_asset === 'ETH' ? livePrice : null
+  useEffect(() => {
+    if (liveEth && useLivePrice) {
+      setValues((v) => ({ ...v, collateral_price: String(liveEth.price) }))
+    }
+  }, [liveEth, useLivePrice])
 
   // Arriving from the landing page's "Load demo position" button.
   useEffect(() => {
@@ -179,6 +200,52 @@ export default function PositionForm() {
         <fieldset disabled={busy} className="flex flex-col gap-4">
           <legend className="sr-only">Your lending position</legend>
 
+          <div className="flex flex-wrap items-center gap-3 rounded-md border border-hairline bg-panel-raised px-3.5 py-2.5">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                checked={useLivePrice}
+                onChange={(e) => setUseLivePrice(e.target.checked)}
+                className="h-4 w-4 accent-[#2DD9A8]"
+              />
+              Use live ETH price
+            </label>
+
+            {marketStatus === 'live' && livePrice ? (
+              <>
+                <Badge tone="safe">
+                  <RadioTower size={11} aria-hidden="true" />
+                  {livePrice.source}
+                </Badge>
+                <span className="tabular text-sm text-ink">{fmtPrice(livePrice.price, 2)}</span>
+              </>
+            ) : marketStatus === 'loading' ? (
+              <span className="flex items-center gap-1.5 text-xs text-muted">
+                <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                fetching…
+              </span>
+            ) : (
+              <Badge tone="warn">Live market data unavailable — demo / manual price</Badge>
+            )}
+
+            <button
+              type="button"
+              onClick={() => fetchLivePrice({ force: true })}
+              disabled={marketStatus === 'loading' || busy}
+              className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-hairline px-2.5 py-1 font-display text-xs text-muted transition-colors hover:border-muted hover:text-ink disabled:opacity-45"
+            >
+              <RefreshCw size={12} aria-hidden="true" />
+              Refresh
+            </button>
+          </div>
+
+          {values.collateral_asset !== 'ETH' && useLivePrice && (
+            <p className="text-xs text-warn">
+              Live pricing covers ETH/USD only. {values.collateral_asset} uses the price you
+              enter below.
+            </p>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Field
               label="Collateral asset"
@@ -219,7 +286,11 @@ export default function PositionForm() {
             <Field
               label="Current asset price"
               htmlFor="pf-price"
-              hint="Today's market price, in USD"
+              hint={
+                liveEth && useLivePrice
+                  ? `Live from ${liveEth.source}. Untick "use live ETH price" to override.`
+                  : "Today's market price, in USD"
+              }
               error={errors.collateral_price}
             >
               <NumberInput

@@ -4,6 +4,7 @@ import { useShield } from '../state/ShieldContext'
 import HealthFactorGauge from '../components/HealthFactorGauge'
 import DecisionTrace from '../components/DecisionTrace'
 import PositionForm from '../components/PositionForm'
+import MarketPanel from '../components/MarketPanel'
 import StepIndicator from '../components/StepIndicator'
 import { shieldState as lookupState } from '../lib/shieldStates'
 import { Badge, Button, Panel, RiskBadge, Stat } from '../components/ui'
@@ -64,6 +65,8 @@ export default function Dashboard() {
 
   return (
     <div className="flex flex-col gap-5">
+      <MarketPanel />
+
       <PositionForm />
 
       <Panel title="Workflow">
