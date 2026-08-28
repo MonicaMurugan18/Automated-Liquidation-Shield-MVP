@@ -13,9 +13,9 @@
 
 | | |
 | --- | --- |
-| **Team name** | `_TO BE FILLED_` |
-| **Institution** | `_TO BE FILLED_` |
-| **Problem statement / track** | `_TO BE FILLED_` |
+| **Team name** | VentureX |
+| **Institution** | Manakula vinayagar institute of technology |
+| **Problem statement / track** | Problem Statement No. 11 – Automated Liquidation Shield / Autonomous DeFi Liquidation Protection|
 
 | Name | Role | GitHub |
 | --- | --- | --- |
