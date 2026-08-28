@@ -42,7 +42,7 @@ function Portal() {
     return (
       <Splash icon={ShieldAlert} title="Protection service unreachable" tone="danger">
         {bootError} Start the backend with{' '}
-        <code className="tabular text-ink">uvicorn app.main:app --port 8000</code> from the
+        <code className="tabular text-ink">uvicorn app.main:app --port 8001</code> from the
         backend directory, then retry.
         <span className="mt-4 block">
           <Button variant="primary" onClick={retryBoot}>

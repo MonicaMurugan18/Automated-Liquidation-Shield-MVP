@@ -33,6 +33,7 @@
 | **Market data** | **Real** ETH/USD spot price from public APIs — see [Market data](#market-data) |
 | **Blockchain** | **None.** Fully simulated — see [What is simulated](#what-is-simulated) |
 | **Run it** | [Quick start](#quick-start) — two terminals, no credentials needed |
+| **Ports** | backend `8001`, frontend `5173` |
 
 ## The problem
 
@@ -249,11 +250,11 @@ pip install -r requirements.txt
 ```
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8001
 ```
 
-- API: <http://localhost:8000/api/health>
-- Interactive docs: <http://localhost:8000/docs>
+- API: <http://localhost:8001/api/health>
+- Interactive docs: <http://localhost:8001/docs>
 
 No `.env` is required. Copy `backend/.env.example` to `backend/.env` only when
 you want Supabase persistence or non-default CORS origins.
@@ -272,7 +273,7 @@ npm run dev
 Open <http://localhost:5173> — the landing dashboard. Press **ENTER
 PROTECTION PORTAL** to reach the position-analysis screen at `/portal`. The dev
 server proxies `/api` to
-`http://127.0.0.1:8000`, so there is no CORS setup and no API URL in the
+`http://127.0.0.1:8001`, so there is no CORS setup and no API URL in the
 bundle. Override the target with `VITE_API_TARGET` if your backend runs
 elsewhere.
 
@@ -282,7 +283,7 @@ elsewhere.
 cd backend && python -m pytest
 ```
 
-284 tests: the risk, scenario, strategy and agent-cycle engines, the market-data
+291 tests: the risk, scenario, strategy and agent-cycle engines, the market-data
 service (fully mocked -- no test touches the internet), the asset catalogue,
 user-entered positions, and every HTTP endpoint.
 Edge cases 1–8 each have named tests — see the map at the top of
@@ -335,7 +336,7 @@ worth having.
 Verify it independently at any time:
 
 ```bash
-curl -s -X POST localhost:8000/api/demo/simulate-drop -H "Content-Type: application/json" -d "{\"price_drop_pct\":10}"
+curl -s -X POST localhost:8001/api/demo/simulate-drop -H "Content-Type: application/json" -d "{\"price_drop_pct\":10}"
 ```
 
 
@@ -519,7 +520,7 @@ hack/
 │   │       ├── scenario_engine.py     price-shock ladder + projections
 │   │       ├── strategy_engine.py     generation, costing, scoring, selection
 │   │       └── repository.py          Supabase / in-memory persistence
-│   ├── tests/                         284 tests across engines and API
+│   ├── tests/                         291 tests across engines and API
 │   ├── requirements.txt
 │   └── .env.example
 ├── frontend/
@@ -533,6 +534,7 @@ hack/
 │       │   ├── StatusBar.jsx          renders the backend's shield state
 │       │   ├── PositionForm.jsx       "Analyze your position" input form
 │       │   ├── StepIndicator.jsx      eight-step rail, derived from the trace
+│       │   ├── ProtectionModal.jsx    risk alert raised on DANGER/LIQUIDATABLE
 │       │   ├── DecisionTrace.jsx      the backend's decision_trace, verbatim
 │       │   ├── DemoControls.jsx       demo trigger + replayed stage log
 │       │   ├── Shell.jsx, ui.jsx
@@ -834,7 +836,7 @@ infrastructure, not rewrites.
 ## Troubleshooting
 
 **"Protection service unreachable"** — the backend is not running, or is on a
-different port. Check <http://localhost:8000/api/health>.
+different port. Check <http://localhost:8001/api/health>.
 
 **`pip install` fails building `pydantic-core`** — you are on Python 3.14 with
 a pinned pydantic older than 2.12. `requirements.txt` already pins 2.13.4;

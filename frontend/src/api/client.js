@@ -43,7 +43,7 @@ async function request(path, { method = 'GET', body } = {}) {
     })
   } catch {
     throw new ApiError(
-      'Cannot reach the protection service. Is the backend running on port 8000?',
+      'Cannot reach the protection service. Is the backend running on port 8001?',
       0,
     )
   }
@@ -91,9 +91,8 @@ export const api = {
 
 /** Strip a position payload down to the fields the API accepts. */
 export function toPositionPayload(position) {
-  return {
+  const payload = {
     collateral_asset: position.collateral_asset,
-    collateral_amount: position.collateral_amount,
     debt_asset: position.debt_asset,
     debt_amount: position.debt_amount,
     collateral_price: position.collateral_price,
@@ -103,6 +102,18 @@ export function toPositionPayload(position) {
     liquidation_bonus: position.liquidation_bonus ?? null,
     close_factor: position.close_factor ?? null,
   }
+
+  // Collateral goes over the wire EITHER as units or as dollars, never both --
+  // the API rejects both, because two sources of truth disagree the moment the
+  // price moves. Units win when present: they are price-independent, so a
+  // re-evaluation after a shock stays correct. Dollars are what the form
+  // collects, and the server converts them.
+  if (position.collateral_amount != null) {
+    payload.collateral_amount = position.collateral_amount
+  } else if (position.collateral_value != null) {
+    payload.collateral_value = position.collateral_value
+  }
+  return payload
 }
 
 /** Strip a preferences payload down to the fields the API accepts. */

@@ -11,11 +11,11 @@
         "--host",
         "127.0.0.1",
         "--port",
-        "8000",
+        "8001",
         "--app-dir",
         "backend"
       ],
-      "port": 8000
+      "port": 8001
     },
     {
       "name": "frontend",

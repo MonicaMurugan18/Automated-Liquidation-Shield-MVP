@@ -351,3 +351,77 @@ def test_the_engine_rejects_the_same_case_the_schema_does():
     """Belt and braces: the rule holds even if a caller bypasses the schema."""
     with pytest.raises(ValidationError):
         risk_engine.health_factor(Position(collateral_amount=0.0, debt_amount=1000.0))
+
+
+# ---------------------------------------------------------------------------
+# Collateral expressed in dollars instead of units
+# ---------------------------------------------------------------------------
+
+def test_collateral_value_is_converted_to_units_server_side():
+    """The friendly input is dollars; the engine still holds units, because
+    only a quantity re-values itself when the price moves."""
+    position = PositionIn(collateral_value=10_000.0, collateral_price=2_500.0).to_domain()
+    assert position.collateral_amount == pytest.approx(4.0)
+    assert position.collateral_value == pytest.approx(10_000.0)
+
+
+def test_value_and_amount_inputs_agree():
+    by_value = PositionIn(collateral_value=10_000.0, collateral_price=2_500.0).to_domain()
+    by_amount = PositionIn(collateral_amount=4.0, collateral_price=2_500.0).to_domain()
+    assert by_value.collateral_amount == pytest.approx(by_amount.collateral_amount)
+    assert risk_engine.health_factor(by_value) == pytest.approx(
+        risk_engine.health_factor(by_amount)
+    )
+
+
+def test_a_dollar_position_still_re_values_under_a_price_shock():
+    """The whole reason for converting: $10,000 entered at $2,500 must become
+    $9,000 after a 10% drop, not stay frozen at $10,000."""
+    body = client.post(
+        "/api/demo/simulate-drop",
+        json={
+            "price_drop_pct": 10,
+            "position": {"collateral_value": 10_000, "collateral_price": 2_500,
+                         "debt_amount": 6_000},
+        },
+    ).json()
+
+    assert body["assessment_before"]["collateral_value"] == pytest.approx(10_000.0, abs=0.01)
+    assert body["assessment_shocked"]["collateral_value"] == pytest.approx(9_000.0, abs=0.01)
+
+
+def test_supplying_both_amount_and_value_is_rejected():
+    """Two sources of truth would disagree the moment the price moved."""
+    r = client.post(
+        "/api/position/analyze",
+        json={"position": {"collateral_amount": 4, "collateral_value": 10_000,
+                           "collateral_price": 2_500}},
+    )
+    assert r.status_code == 422
+    assert "not both" in r.text
+
+
+def test_zero_collateral_value_with_debt_is_rejected():
+    r = client.post(
+        "/api/position/analyze",
+        json={"position": {"collateral_value": 0, "debt_amount": 5_000}},
+    )
+    assert r.status_code == 422
+    assert "collateral" in r.text.lower()
+
+
+def test_omitting_both_falls_back_to_the_seed_holding():
+    assert PositionIn().to_domain().collateral_value == pytest.approx(10_000.0, abs=0.01)
+
+
+def test_health_factor_tracks_the_entered_collateral_value():
+    def hf(value):
+        return client.post(
+            "/api/position/analyze",
+            json={"position": {"collateral_value": value, "collateral_price": 2_500,
+                               "debt_amount": 5_000}},
+        ).json()["assessment"]["health_factor"]
+
+    assert hf(20_000) > hf(10_000) > hf(6_000)
+    # 10,000 * 0.625 / 5,000
+    assert hf(10_000) == pytest.approx(1.25, abs=1e-4)

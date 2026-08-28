@@ -13,6 +13,9 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..services import assets
+
+#: The seed demo holding: ~3.3333 ETH, worth $10,000 at $3,000.
+DEFAULT_COLLATERAL_AMOUNT = 10_000.0 / 3_000.0
 from ..models.domain import (
     MarketConditions,
     Position,
@@ -38,10 +41,20 @@ class PositionIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     collateral_asset: str = "ETH"
-    collateral_amount: float = Field(
-        default=10_000.0 / 3_000.0,
+    collateral_amount: Optional[float] = Field(
+        default=None,
         ge=0,
         description="Units of the collateral asset, not dollars.",
+    )
+    collateral_value: Optional[float] = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Collateral in USD, as an alternative to collateral_amount. "
+            "The server converts it to units at collateral_price, because the "
+            "engines must hold units -- that is what lets a price shock "
+            "re-value the position. Supply one or the other, not both."
+        ),
     )
     debt_asset: str = "USDC"
     debt_amount: float = Field(default=5_000.0, ge=0)
@@ -73,9 +86,34 @@ class PositionIn(BaseModel):
             )
         return symbol
 
+    @property
+    def resolved_collateral_amount(self) -> float:
+        """Collateral in UNITS, however the client chose to express it.
+
+        Units are the engine's currency, not dollars: a price shock re-values a
+        holding automatically only if the holding is stored as a quantity. A
+        dollar figure would be frozen at the price it was entered at, which
+        would quietly break every scenario projection.
+        """
+        if self.collateral_amount is not None:
+            return self.collateral_amount
+        if self.collateral_value is not None:
+            return self.collateral_value / self.collateral_price
+        return DEFAULT_COLLATERAL_AMOUNT
+
+    @model_validator(mode="after")
+    def _one_way_of_expressing_collateral(self) -> "PositionIn":
+        if self.collateral_amount is not None and self.collateral_value is not None:
+            raise ValueError(
+                "Give either collateral_amount (units) or collateral_value "
+                "(USD), not both -- two sources of truth would silently "
+                "disagree the moment the price moved."
+            )
+        return self
+
     @model_validator(mode="after")
     def _debt_needs_collateral(self) -> "PositionIn":
-        if self.collateral_amount <= 0 and self.debt_amount > 0:
+        if self.resolved_collateral_amount <= 0 and self.debt_amount > 0:
             raise ValueError(
                 "A position with debt must have collateral securing it. Enter a "
                 "collateral amount greater than zero."
@@ -86,7 +124,7 @@ class PositionIn(BaseModel):
         spec = assets.get(self.collateral_asset)
         return Position(
             collateral_asset=spec.symbol,
-            collateral_amount=self.collateral_amount,
+            collateral_amount=self.resolved_collateral_amount,
             debt_asset=self.debt_asset,
             debt_amount=self.debt_amount,
             collateral_price=self.collateral_price,

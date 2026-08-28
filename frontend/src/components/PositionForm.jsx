@@ -17,7 +17,11 @@ import { fmtPrice } from '../lib/format'
 
 const BLANK_FIELDS = {
   collateral_asset: 'ETH',
-  collateral_amount: '',
+  // Collateral is entered in DOLLARS -- the friendlier unit for someone who
+  // knows they deposited "about $10,000". The backend converts it to units at
+  // the entered price, because only a quantity re-values itself when the
+  // price moves. The conversion is deliberately not done here.
+  collateral_value: '',
   collateral_price: '',
   debt_amount: '',
   target_health_factor: '1.50',
@@ -27,18 +31,18 @@ const BLANK_FIELDS = {
 /** Friendly, field-level validation mirroring the backend's rules. */
 function validate(values) {
   const errors = {}
-  const amount = Number(values.collateral_amount)
+  const collateral = Number(values.collateral_value)
   const price = Number(values.collateral_price)
   const debt = Number(values.debt_amount)
   const target = Number(values.target_health_factor)
   const trigger = Number(values.trigger_health_factor)
 
-  if (values.collateral_amount === '' || Number.isNaN(amount)) {
-    errors.collateral_amount = 'Please enter a valid collateral amount.'
-  } else if (amount < 0) {
-    errors.collateral_amount = 'Collateral cannot be negative.'
-  } else if (amount === 0) {
-    errors.collateral_amount = 'Collateral must be greater than zero.'
+  if (values.collateral_value === '' || Number.isNaN(collateral)) {
+    errors.collateral_value = 'Please enter your collateral value.'
+  } else if (collateral < 0) {
+    errors.collateral_value = 'Collateral cannot be negative.'
+  } else if (collateral === 0) {
+    errors.collateral_value = 'Collateral must be greater than zero.'
   }
 
   if (values.collateral_price === '' || Number.isNaN(price)) {
@@ -68,7 +72,7 @@ function validate(values) {
 }
 
 const FIELD_ORDER = [
-  'collateral_amount',
+  'collateral_value',
   'collateral_price',
   'debt_amount',
   'target_health_factor',
@@ -102,7 +106,7 @@ export default function PositionForm() {
     if (!demoPosition) return
     setValues({
       collateral_asset: demoPosition.collateral_asset,
-      collateral_amount: String(Number(demoPosition.collateral_amount.toFixed(4))),
+      collateral_value: String(Math.round(demoPosition.collateral_value)),
       collateral_price: String(demoPosition.collateral_price),
       debt_amount: String(demoPosition.debt_amount),
       target_health_factor: '1.50',
@@ -175,7 +179,7 @@ export default function PositionForm() {
     await analysePosition({
       position: {
         collateral_asset: values.collateral_asset,
-        collateral_amount: Number(values.collateral_amount),
+        collateral_value: Number(values.collateral_value),
         collateral_price: Number(values.collateral_price),
         debt_amount: Number(values.debt_amount),
       },
@@ -193,8 +197,8 @@ export default function PositionForm() {
 
   return (
     <Panel
-      title="Analyze your position"
-      subtitle="Enter your own DeFi position. The engine calculates everything from these values."
+      title="Protect your position"
+      subtitle="Enter what you deposited and what you borrowed. The engine does the rest."
     >
       <form onSubmit={submit} noValidate className="flex flex-col gap-4">
         <fieldset disabled={busy} className="flex flex-col gap-4">
@@ -266,20 +270,20 @@ export default function PositionForm() {
             </Field>
 
             <Field
-              label="Collateral amount"
-              htmlFor="pf-amount"
-              hint={`How many ${values.collateral_asset} you deposited`}
-              error={errors.collateral_amount}
+              label="Collateral value"
+              htmlFor="pf-collateral"
+              hint={`What your ${values.collateral_asset} deposit is worth today`}
+              error={errors.collateral_value}
             >
               <NumberInput
-                id="pf-amount"
-                inputRef={(el) => (refs.current.collateral_amount = el)}
-                value={values.collateral_amount}
-                onChange={set('collateral_amount')}
+                id="pf-collateral"
+                inputRef={(el) => (refs.current.collateral_value = el)}
+                value={values.collateral_value}
+                onChange={set('collateral_value')}
                 step="any"
-                placeholder="0.00"
-                suffix={values.collateral_asset}
-                invalid={Boolean(errors.collateral_amount)}
+                placeholder="10000"
+                suffix="USD"
+                invalid={Boolean(errors.collateral_value)}
               />
             </Field>
 
@@ -308,7 +312,7 @@ export default function PositionForm() {
             <Field
               label="Debt amount"
               htmlFor="pf-debt"
-              hint={`What you borrowed, in ${assetCatalogue.default_debt_asset} (1 = $1)`}
+              hint="What you owe the lending protocol, in USD"
               error={errors.debt_amount}
             >
               <NumberInput

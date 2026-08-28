@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import StatusBar from './StatusBar'
 import DemoControls from './DemoControls'
+import ProtectionModal from './ProtectionModal'
 import { ErrorBanner } from './ui'
 import { useShield } from '../state/ShieldContext'
 
@@ -63,6 +64,7 @@ export default function Shell() {
   return (
     <div className="min-h-screen bg-base">
       <StatusBar />
+      <ProtectionModal />
 
       <div className="mx-auto flex max-w-[1400px] gap-6 px-4 py-5 sm:px-6">
         {/* Desktop rail */}

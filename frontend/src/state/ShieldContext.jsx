@@ -96,6 +96,17 @@ export function ShieldProvider({ children }) {
    * so the set that produced it is kept here for review.
    */
   const [lastCycle, setLastCycle] = useState(null)
+
+  /**
+   * The cycle that warranted interrupting the user, or null.
+   *
+   * Raised only for a backend risk level of DANGER or LIQUIDATABLE. A WARNING
+   * position is reported inline instead: interrupting someone for a position
+   * merely below target teaches them to dismiss the alarm without reading it,
+   * which is the opposite of what a liquidation alert is for.
+   */
+  const [protectionAlert, setProtectionAlert] = useState(null)
+  const dismissProtectionAlert = useCallback(() => setProtectionAlert(null), [])
   const [traceSteps, setTraceSteps] = useState([])
   const [demoRunning, setDemoRunning] = useState(false)
   const [analysing, setAnalysing] = useState(false)
@@ -250,6 +261,7 @@ export function ShieldProvider({ children }) {
       setLastRescue(null)
       setDecisionTrace(null)
       setLastCycle(null)
+      setProtectionAlert(null)
       await evaluate(next, preferences, market)
     },
     [position, preferences, market, evaluate],
@@ -277,6 +289,7 @@ export function ShieldProvider({ children }) {
     setLastRescue(null)
     setDecisionTrace(null)
     setLastCycle(null)
+    setProtectionAlert(null)
     setTraceSteps([])
     setPosition(basePosition)
     await evaluate(basePosition, preferences, market, { label: 'Resetting position' })
@@ -394,6 +407,13 @@ export function ShieldProvider({ children }) {
         await refreshHistory()
       }
 
+      // Interrupt only for a genuinely risky position, and only once the
+      // status-bar walk has finished so the modal does not cover it.
+      const risk = cycle.assessment_shocked?.risk_level
+      setProtectionAlert(
+        risk === 'DANGER' || risk === 'LIQUIDATABLE' ? cycle : null,
+      )
+
       // Settle the app on whatever position the cycle ended with, and refresh
       // the other pages from the API rather than reusing stale numbers.
       setPosition(cycle.position_final)
@@ -462,6 +482,11 @@ export function ShieldProvider({ children }) {
       const nextPosition = {
         ...position,
         ...entered,
+        // The form supplies collateral in dollars. The previous position's
+        // unit count is now stale and must not travel with it -- leaving it in
+        // place would send both, which the API rejects, and would silently
+        // ignore whatever the user just typed.
+        ...(entered.collateral_value != null ? { collateral_amount: null } : {}),
         // Let the backend resolve these from the chosen asset.
         liquidation_threshold: null,
         liquidation_bonus: null,
@@ -548,6 +573,8 @@ export function ShieldProvider({ children }) {
       lastRescue,
       decisionTrace,
       lastCycle,
+      protectionAlert,
+      dismissProtectionAlert,
       traceSteps,
       demoRunning,
       demoDropPct: DEMO_DROP_PCT,
@@ -571,7 +598,7 @@ export function ShieldProvider({ children }) {
       market, bands, assessment, scenarios, scenarioSummary, breakingScenario, thresholds,
       strategies, selectedStrategy, explanation, weights, validation, history,
       persistence, systemHealth, livePrice, marketStatus, marketError, fetchLivePrice,
-      shieldState, lastRescue, decisionTrace, lastCycle, traceSteps, demoRunning,
+      shieldState, lastRescue, decisionTrace, lastCycle, protectionAlert, dismissProtectionAlert, traceSteps, demoRunning,
       assetCatalogue, collateralSpec, demoPosition, analysing, boot, applyPosition, applyPreferences,
       applyMarket, resetPosition, executeRescue, runDemo, analysePosition,
       loadDemoPosition,
