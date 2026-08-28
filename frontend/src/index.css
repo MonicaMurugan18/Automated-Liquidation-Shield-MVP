@@ -1,0 +1,97 @@
+@import 'tailwindcss';
+
+/* ---------------------------------------------------------------------------
+   Control-room palette. Graphite base, not pure black -- the panels have to
+   read as a lit instrument surface, and #000 kills the depth between layers.
+   Status colours are functional only: they never decorate, they only classify.
+   --------------------------------------------------------------------------- */
+@theme {
+  --color-base: #0d1117;
+  --color-panel: #151b24;
+  --color-panel-raised: #1b2330;
+  --color-hairline: #242d3a;
+  --color-ink: #e8ecf1;
+  --color-muted: #7c8798;
+
+  --color-safe: #2dd9a8;
+  --color-warn: #e8a33d;
+  --color-danger: #e1524f;
+
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-base);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Telemetry rule: every digit that can change while you watch it is
+     tabular, so columns do not jitter as values update. */
+  .tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  /* Keyboard focus must be visible everywhere. */
+  :focus-visible {
+    outline: 2px solid var(--color-safe);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-base);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-hairline);
+    border-radius: 6px;
+  }
+}
+
+@layer utilities {
+  /* The one deliberate motion moment in the product: the status bar pulse
+     while the agent is mid-rescue. Everything else is static. */
+  @keyframes shield-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  .animate-shield-pulse {
+    animation: shield-pulse 1.4s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-shield-pulse {
+      animation: none;
+    }
+    * {
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
