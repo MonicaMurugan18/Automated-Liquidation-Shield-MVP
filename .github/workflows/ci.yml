@@ -46,9 +46,35 @@ jobs:
       - name: Run the test suite
         run: python -m pytest -q
 
-      - name: Check the app imports cleanly
-        # Catches an import-time error that the tests might mask.
-        run: python -c "from app.main import app; print(f'{len(app.routes)} routes registered')"
+      - name: Check every endpoint is registered
+        # Catches an import-time error the tests might mask, and a router that
+        # silently registered nothing. Counting app.routes would not: this
+        # FastAPI version nests included routers, so that count stays at 6
+        # whether the API has twelve endpoints or none. The OpenAPI schema is
+        # flattened, so it reflects the real surface.
+        run: |
+          python - <<'PY'
+          from app.main import app
+
+          expected = {
+              "/api/health",
+              "/api/position/analyze",
+              "/api/scenario/simulate",
+              "/api/strategies/generate",
+              "/api/strategies/compare",
+              "/api/rescue/validate",
+              "/api/rescue/autoexecute",
+              "/api/history",
+              "/api/assets",
+              "/api/defaults",
+              "/api/demo/simulate-drop",
+          }
+          actual = set(app.openapi()["paths"])
+          missing = expected - actual
+          if missing:
+              raise SystemExit(f"Endpoints missing from the API: {sorted(missing)}")
+          print(f"All {len(expected)} endpoints registered ({len(actual)} paths total).")
+          PY
 
   frontend:
     name: Frontend · lint and build
@@ -93,32 +119,55 @@ jobs:
       # --- Secret scanning. Blocking: a committed credential is our bug. ----
       - name: No committed secrets
         run: |
-          set -e
+          set -euo pipefail
+
+          # This step must not flag its own pattern definitions. Two defences,
+          # belt and braces:
+          #   1. every pattern below is STRUCTURAL, so none of them appears as
+          #      literal text in this file and none can match itself;
+          #   2. this workflow is excluded from the search anyway, as a net.
+          # Anything else -- including every other workflow -- is still scanned.
+          EXCLUDE=(':!.github/workflows/ci.yml')
+
           fail=0
 
-          # A real .env must never be committed. .env.example is expected.
-          if git ls-files --error-unmatch backend/.env frontend/.env 2>/dev/null; then
-            echo "::error::A .env file is tracked by git. Remove it and rotate the keys."
+          # --- a tracked .env is always a leak; .env.example is expected ------
+          # Checked one path at a time on purpose: `git ls-files --error-unmatch`
+          # fails as soon as ANY argument is untracked, so passing several paths
+          # at once would silently miss a real leak in the first of them.
+          while IFS= read -r env_file; do
+            echo "::error file=${env_file}::Tracked .env file. Remove it from git history and rotate the keys."
             fail=1
-          fi
+          done < <(git ls-files -- '.env' '**/.env' ':!*.example')
 
-          # Supabase service-role keys and private keys, anywhere in the tree.
-          if git grep -nE 'SUPABASE_SERVICE_KEY[[:space:]]*=[[:space:]]*[A-Za-z0-9._-]{20,}' -- . ':!*.example' ; then
-            echo "::error::A populated SUPABASE_SERVICE_KEY is committed."
-            fail=1
-          fi
-          if git grep -nE 'BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY' -- . ; then
-            echo "::error::A private key is committed."
-            fail=1
-          fi
-          # Supabase anon/service JWTs are JWTs that start with this header.
-          if git grep -nE 'eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}' -- . ':!*.example' ; then
-            echo "::error::A JWT that looks like a Supabase key is committed."
-            fail=1
-          fi
+          # --- credential patterns -------------------------------------------
+          scan() {
+            local message="$1" pattern="$2"
+            if git grep -nIE "$pattern" -- . "${EXCLUDE[@]}" ':!*.example'; then
+              echo "::error::${message}"
+              fail=1
+            fi
+          }
 
-          if [ "$fail" -eq 0 ]; then echo "No committed secrets found."; fi
-          exit $fail
+          scan "A populated SUPABASE_SERVICE_KEY is committed." \
+               'SUPABASE_SERVICE_KEY[[:space:]]*[=:][[:space:]]*[A-Za-z0-9._-]{20,}'
+
+          scan "A private key is committed." \
+               'BEGIN[[:space:]]+((RSA|EC|DSA|OPENSSH|PGP)[[:space:]]+)?PRIVATE[[:space:]]+KEY'
+
+          # Any JWT, matched by SHAPE (header.payload.signature) rather than by
+          # a hard-coded header value. The previous version searched for the
+          # literal base64 of {"alg":"HS256","typ":"JWT"}, which meant the
+          # workflow matched itself and failed every run. Matching structurally
+          # also catches tokens signed with other algorithms, which the literal
+          # never would.
+          scan "A JSON Web Token is committed." \
+               'eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}'
+
+          if [ "$fail" -eq 0 ]; then
+            echo "No committed secrets found."
+          fi
+          exit "$fail"
 
       # --- Dependency advisories. Reported, not blocking. -------------------
       - name: Python dependency audit
