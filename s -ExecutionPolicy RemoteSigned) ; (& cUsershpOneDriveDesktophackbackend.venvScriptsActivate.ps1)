@@ -1,0 +1,26 @@
+[35m.github/workflows/ci.yml[m[36m:[m[32m106[m[36m:[m          if git grep -nE '[1;31mSUPABASE[m_SERVICE_KEY[[:space:]]*=[[:space:]]*[A-Za-z0-9._-]{20,}' -- . ':!*.example' ; then
+[35m.github/workflows/ci.yml[m[36m:[m[32m107[m[36m:[m            echo "::error::A populated [1;31mSUPABASE[m_SERVICE_KEY is committed."
+[35mREADME.md[m[36m:[m[32m476[m[36m:[m├── [1;31msupabase[m/schema.sql                tables, constraints, RLS
+[35mREADME.md[m[36m:[m[32m625[m[36m:[m1. Create a project at [[1;31msupabase[m.com](https://[1;31msupabase[m.com).
+[35mREADME.md[m[36m:[m[32m627[m[36m:[m   `[1;31msupabase[m/schema.sql`, and run it. It is idempotent and seeds the demo user.
+[35mREADME.md[m[36m:[m[32m630[m[36m:[m   `[1;31mSUPABASE[m_URL`.
+[35mREADME.md[m[36m:[m[32m632[m[36m:[m   `[1;31mSUPABASE[m_SERVICE_KEY`.
+[35mREADME.md[m[36m:[m[32m634[m[36m:[m   `"persistence": "[1;31msupabase[m"`.
+[35mSECURITY.md[m[36m:[m[32m25[m[36m:[m`[1;31msupabase[m/schema.sql` enables Row Level Security on every table and defines no
+[35mbackend/.env.example[m[36m:[m[32m7[m[36m:[m[1;31mSUPABASE[m_URL=
+[35mbackend/.env.example[m[36m:[m[32m12[m[36m:[m[1;31mSUPABASE[m_SERVICE_KEY=
+[35mbackend/.env.example[m[36m:[m[32m15[m[36m:[m# by [1;31msupabase[m/schema.sql.
+[35mbackend/app/config.py[m[36m:[m[32m26[m[36m:[m    [1;31msupabase[m_url: Optional[str] = os.getenv("[1;31mSUPABASE[m_URL") or None
+[35mbackend/app/config.py[m[36m:[m[32m27[m[36m:[m    [1;31msupabase[m_key: Optional[str] = os.getenv("[1;31mSUPABASE[m_SERVICE_KEY") or None
+[35mbackend/app/config.py[m[36m:[m[32m49[m[36m:[m    def [1;31msupabase[m_enabled(self) -> bool:
+[35mbackend/app/config.py[m[36m:[m[32m50[m[36m:[m        return bool(self.[1;31msupabase[m_url and self.[1;31msupabase[m_key)
+[35mbackend/app/services/repository.py[m[36m:[m[32m5[m[36m:[m  * SupabaseRepository -- used when [1;31mSUPABASE[m_URL and [1;31mSUPABASE[m_SERVICE_KEY are
+[35mbackend/app/services/repository.py[m[36m:[m[32m88[m[36m:[m    """Supabase (PostgreSQL) store. Schema lives in [1;31msupabase[m/schema.sql."""
+[35mbackend/app/services/repository.py[m[36m:[m[32m90[m[36m:[m    backend_name = "[1;31msupabase[m"
+[35mbackend/app/services/repository.py[m[36m:[m[32m93[m[36m:[m        from [1;31msupabase[m import create_client  # imported lazily: optional dependency
+[35mbackend/app/services/repository.py[m[36m:[m[32m146[m[36m:[m    if settings.[1;31msupabase[m_enabled:
+[35mbackend/app/services/repository.py[m[36m:[m[32m148[m[36m:[m            _repository = SupabaseRepository(settings.[1;31msupabase[m_url, settings.[1;31msupabase[m_key)
+[35mbackend/app/services/repository.py[m[36m:[m[32m157[m[36m:[m    logger.info("Persistence: in-memory (set [1;31mSUPABASE[m_URL/[1;31mSUPABASE[m_SERVICE_KEY to persist)")
+[35mbackend/requirements.txt[m[36m:[m[32m7[m[36m:[m# Optional: only imported when [1;31mSUPABASE[m_URL / [1;31mSUPABASE[m_SERVICE_KEY are set.
+[35mbackend/requirements.txt[m[36m:[m[32m9[m[36m:[m[1;31msupabase[m==2.31.0
+[35mfrontend/src/pages/RescueHistory.jsx[m[36m:[m[32m14[m[36m:[m        persistence === '[1;31msupabase[m'

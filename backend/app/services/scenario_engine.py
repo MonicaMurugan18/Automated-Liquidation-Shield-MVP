@@ -64,7 +64,7 @@ def simulate_scenario(
     elif repayment <= 0:
         # Edge case 6: minimum repayment is zero.
         summary = "None required -- position stays above the safety target."
-    elif hf < risk_engine.LIQUIDATION_HF:
+    elif hf <= risk_engine.LIQUIDATION_HF:
         summary = (
             f"Liquidatable. Repay ${repayment:,.0f} or add ${topup:,.0f} "
             f"collateral immediately."
@@ -79,7 +79,7 @@ def simulate_scenario(
         new_collateral_value=round(shocked.collateral_value, 2),
         health_factor=round(hf, 4),
         risk_level=level,
-        liquidatable=hf < risk_engine.LIQUIDATION_HF,
+        liquidatable=hf <= risk_engine.LIQUIDATION_HF,
         requires_intervention=needs_action,
         required_repayment=round(repayment, 2),
         required_collateral_topup=round(topup, 2),

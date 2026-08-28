@@ -254,6 +254,7 @@ class Strategy:
     total_cost: float
     status: StrategyStatus
     rejection_reason: Optional[str] = None
+    acceptance_reason: Optional[str] = None
     score: float = 0.0
     score_breakdown: Dict[str, float] = field(default_factory=dict)
     selected: bool = False

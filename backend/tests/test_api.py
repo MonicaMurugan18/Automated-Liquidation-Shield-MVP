@@ -52,12 +52,39 @@ def test_analyze_defaults_to_the_seed_position():
     assert body["assessment"]["requires_action"] is False
 
 
+def test_defaults_endpoint_returns_a_realistic_demo_position():
+    body = client.get("/api/defaults").json()
+    position = body["position"]
+    assert position["collateral_asset"] == "ETH"
+    assert position["collateral_amount"] == pytest.approx(5.0)
+    assert position["debt_amount"] == pytest.approx(5800.0)
+    assert position["collateral_value"] == pytest.approx(15000.0)
+
+
 def test_analyze_after_a_price_drop_requires_action():
     r = client.post("/api/position/analyze", json={"position": DROPPED})
     body = r.json()["assessment"]
     assert body["health_factor"] == pytest.approx(1.125, abs=1e-4)
     assert body["risk_level"] == "DANGER"
     assert body["requires_action"] is True
+
+
+def test_analyze_exact_usd_position_preserves_units_and_health_factor():
+    response = client.post(
+        "/api/position/analyze",
+        json={
+            "position": {
+                "collateral_value": 12_150.0,
+                "collateral_price": 2_427.0,
+                "debt_amount": 6_000.0,
+            }
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["position"]["collateral_amount"] == pytest.approx(5.00618, abs=1e-5)
+    assert body["assessment"]["health_factor"] == pytest.approx(1.265625, abs=1e-4)
+    assert body["assessment"]["liquidation_price"] == pytest.approx(1_917.63, abs=0.01)
 
 
 def test_analyze_rejects_negative_collateral():
@@ -98,6 +125,8 @@ def test_scenario_ladder_matches_the_brief():
     assert [s["health_factor"] for s in scenarios] == pytest.approx(
         [1.25, 1.1875, 1.125, 1.0625, 1.0], abs=1e-4
     )
+    assert scenarios[-1]["risk_level"] == "LIQUIDATABLE"
+    assert scenarios[-1]["liquidatable"] is True
     assert all("intervention_summary" in s for s in scenarios)
 
 
@@ -128,13 +157,23 @@ def test_generate_returns_scored_candidates_with_one_selected():
     assert body["selected_strategy"]["resulting_health_factor"] >= 1.5
 
 
-def test_generate_returns_no_candidates_for_a_safe_position():
-    """Edge case 1: nothing to do, and the API says so rather than inventing
-    a strategy."""
-    r = client.post("/api/strategies/generate", json={})
-    body = r.json()
+def test_generate_returns_no_candidates_above_target():
+    """Nothing to do, and the API says so rather than inventing a strategy."""
+    body = client.post(
+        "/api/strategies/generate", json={"position": {"debt_amount": 2000}}
+    ).json()
     assert body["strategies"] == []
     assert body["selected_strategy"] is None
+
+
+def test_generate_offers_candidates_below_target_without_selecting_one():
+    """The seed position (HF 1.25) is below the 1.50 target but above the 1.20
+    trigger: choices, no action."""
+    body = client.post("/api/strategies/generate", json={}).json()
+    assert len(body["strategies"]) == 5
+    assert any(s["is_executable"] for s in body["strategies"])
+    assert body["selected_strategy"] is None
+    assert not any(s["selected"] for s in body["strategies"])
 
 
 def test_generate_marks_the_undersized_candidate_invalid():
@@ -348,8 +387,9 @@ def test_history_rejects_an_out_of_range_limit():
 
 def test_defaults_bootstraps_the_frontend():
     body = client.get("/api/defaults").json()
-    assert body["position"]["collateral_value"] == pytest.approx(10_000.0, abs=0.01)
-    assert body["position"]["debt_amount"] == 5_000.0
+    assert body["position"]["collateral_value"] == pytest.approx(15_000.0, abs=0.01)
+    assert body["position"]["collateral_amount"] == pytest.approx(5.0)
+    assert body["position"]["debt_amount"] == 5_800.0
     assert body["preferences"]["mode"] == "AUTONOMOUS"
     assert body["risk_bands"] == {"liquidatable": 1.0, "danger": 1.20, "warning": 1.50}
     assert body["modes"] == ["AUTONOMOUS", "ADVISORY"]
@@ -476,13 +516,25 @@ def test_simulate_drop_holds_in_advisory_mode():
     assert confirmed["transaction"]["mode"] == "ADVISORY"
 
 
-def test_simulate_drop_does_nothing_when_the_trigger_is_not_breached():
+def test_simulate_drop_executes_nothing_when_the_trigger_is_not_breached():
+    """A 2% dip leaves HF 1.225: below target, above the trigger. The user is
+    offered choices; the agent takes none of them."""
     body = client.post("/api/demo/simulate-drop", json={"price_drop_pct": 2}).json()
 
     assert body["executed"] is False
     assert body["execution_status"] == "NO_ACTION_REQUIRED"
-    assert body["strategies"] == []
+    assert body["selected_strategy"] is None
+    assert body["strategies"], "below target, options should still be offered"
     assert {s["shield_state"] for s in body["trace"]} == {"ARMED"}
+
+
+def test_simulate_drop_offers_nothing_above_target():
+    body = client.post(
+        "/api/demo/simulate-drop",
+        json={"price_drop_pct": 2, "position": {"debt_amount": 2000}},
+    ).json()
+    assert body["strategies"] == []
+    assert body["executed"] is False
 
 
 def test_simulate_drop_stands_down_when_nothing_is_viable():

@@ -338,12 +338,33 @@ def test_explanation_names_the_strategy_and_the_deciding_factor():
 # Edge cases 1 and 6: nothing to do
 # ---------------------------------------------------------------------------
 
-def test_safe_position_needs_no_rescue():
+def test_below_target_but_above_trigger_offers_options_without_acting():
+    """The seed position sits at HF 1.25: below the 1.50 target, above the 1.20
+    trigger. It must offer choices and execute nothing.
+
+    Regression: generation used to be gated on the ACTION trigger, so this
+    reported "0 strategies generated" while the scenario ladder showed the
+    trigger being crossed two rungs down -- the dashboard contradicting
+    itself."""
     decision = strategy_engine.evaluate(SEED, PREFS, MarketConditions())
 
     assert decision.assessment.risk_level is RiskLevel.WARNING
     assert decision.execution_status is ExecutionStatus.NO_ACTION_REQUIRED
     assert decision.shield_state is ShieldState.ARMED
+    assert decision.strategies, "options must be offered below target"
+    assert any(s.is_executable for s in decision.strategies)
+    # Nothing is SELECTED, because selection means "this is what will run".
+    assert decision.selected_strategy is None
+    assert not any(s.selected for s in decision.strategies)
+
+
+def test_a_position_above_target_offers_nothing():
+    """Above target a rescue would move the position no closer to where the
+    user asked it to be, so there is genuinely nothing to offer."""
+    comfortable = Position(debt_amount=2_000.0)   # HF 3.125
+    decision = strategy_engine.evaluate(comfortable, PREFS, MarketConditions())
+
+    assert decision.assessment.risk_level is RiskLevel.SAFE
     assert decision.strategies == []
     assert decision.selected_strategy is None
 

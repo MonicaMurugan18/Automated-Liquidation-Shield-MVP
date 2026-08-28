@@ -209,23 +209,28 @@ export function ShieldProvider({ children }) {
         api.health(),
         api.assets(),
       ])
-      setPosition(defaults.position)
-      setBasePosition(defaults.position)
+      const live = await fetchLivePrice()
+      const startingPosition = live
+        ? { ...defaults.position, collateral_price: live.price }
+        : defaults.position
+      const startingMarket = live
+        ? { ...defaults.market, eth_price: live.price }
+        : defaults.market
+
+      setPosition(startingPosition)
+      setBasePosition(startingPosition)
       setPreferences(defaults.preferences)
-      setMarket(defaults.market)
+      setMarket(startingMarket)
       setBands(defaults.risk_bands)
       setAssetCatalogue(catalogue)
-      setDemoPosition(defaults.position)
+      setDemoPosition(startingPosition)
       setPersistence(health.persistence)
       setSystemHealth(health)
-      await evaluate(defaults.position, defaults.preferences, defaults.market, {
+      await evaluate(startingPosition, defaults.preferences, startingMarket, {
         quiet: true,
       })
       await refreshHistory()
       setBooted(true)
-      // Fired after boot completes on purpose: a market outage must not delay
-      // or fail the dashboard.
-      fetchLivePrice()
     } catch (err) {
       setSystemHealth(null)
       setBootError(err.message)

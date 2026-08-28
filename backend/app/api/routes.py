@@ -40,6 +40,7 @@ from ..schemas.api import (
     ValidationResponse,
 )
 from ..services import (
+    advisor,
     agent_cycle,
     assets,
     market_data,
@@ -243,6 +244,7 @@ def compare_strategies(request: StrategyRequest) -> ComparisonResponse:
             "score_breakdown": s.score_breakdown,
             "selected": s.selected,
             "rejection_reason": s.rejection_reason,
+            "acceptance_reason": s.acceptance_reason,
         }
         for s in decision.strategies
     ]
@@ -280,6 +282,8 @@ def validate_rescue(request: StrategyRequest) -> ValidationResponse:
         ExecutionStatus.AWAITING_CONFIRMATION,
     )
 
+    scenarios = scenario_engine.simulate(position, prefs=prefs)
+
     return ValidationResponse(
         can_execute=can_execute,
         reason=decision.explanation,
@@ -289,6 +293,8 @@ def validate_rescue(request: StrategyRequest) -> ValidationResponse:
         selected_strategy=(
             decision.selected_strategy.to_dict() if decision.selected_strategy else None
         ),
+        guidance=advisor.advise(position, prefs, decision).to_dict(),
+        future_risk=[s.to_dict() for s in scenarios],
     )
 
 
@@ -555,7 +561,11 @@ def defaults() -> Dict[str, Any]:
     rather than duplicated in the frontend.
     """
     settings = get_settings()
-    position = Position(collateral_price=settings.default_eth_price)
+    position = Position(
+        collateral_amount=settings.demo_collateral_amount,
+        debt_amount=settings.demo_debt_amount,
+        collateral_price=settings.default_eth_price,
+    )
     prefs = RiskPreferences()
     market = MarketConditions(
         eth_price=settings.default_eth_price,

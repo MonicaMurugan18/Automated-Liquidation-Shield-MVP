@@ -265,9 +265,31 @@ def run_cycle(
 
     scenarios = scenario_engine.simulate(shocked, prefs=prefs)
 
-    # The position never crossed the trigger: nothing to generate, nothing to
-    # execute. Report that honestly rather than inventing a rescue.
+    # The position never crossed the trigger: nothing will be executed. But
+    # options are still generated and shown, because a position below target is
+    # one a user may want to act on early -- and reporting "0 strategies" while
+    # the scenario ladder shows the trigger being crossed two rungs down is a
+    # contradiction, not restraint.
     if not breached:
+        idle = strategy_engine.evaluate(shocked, prefs, market)
+        options = idle.strategies
+        viable = [s for s in options if s.is_executable]
+
+        if options:
+            trace.append(
+                TraceStep(
+                    stage=CycleStage.GENERATE,
+                    shield_state=ShieldState.ARMED,
+                    label=f"{len(options)} protection options available",
+                    detail=(
+                        f"{len(viable)} clear every constraint. Nothing is "
+                        f"executed above the "
+                        f"{prefs.trigger_health_factor:.2f} trigger -- these "
+                        f"are choices, not actions."
+                    ),
+                )
+            )
+
         trace.append(
             TraceStep(
                 stage=CycleStage.REARM,
@@ -290,17 +312,13 @@ def run_cycle(
             assessment_shocked=assessment_shocked,
             assessment_final=assessment_shocked,
             scenarios=scenarios,
-            strategies=[],
+            strategies=options,
             selected_strategy=None,
             execution_status=ExecutionStatus.NO_ACTION_REQUIRED,
             shield_state=ShieldState.ARMED,
             executed=False,
-            explanation=assessment_shocked.message,
-            economics={
-                "rescue_cost": 0.0,
-                "potential_loss": assessment_shocked.potential_liquidation_loss,
-                "net_benefit": 0.0,
-            },
+            explanation=idle.explanation,
+            economics=idle.economics,
             market=market,
             trace=trace,
         )

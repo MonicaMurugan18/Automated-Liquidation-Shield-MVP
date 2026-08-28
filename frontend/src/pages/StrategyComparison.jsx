@@ -1,6 +1,6 @@
 import { ShieldCheck } from 'lucide-react'
 import { useShield } from '../state/ShieldContext'
-import { Badge, EmptyState, Panel } from '../components/ui'
+import { Badge, Button, EmptyState, Panel } from '../components/ui'
 import {
   STATUS_LABEL_SHORT,
   TONE_HEX,
@@ -43,6 +43,9 @@ export default function StrategyComparison() {
     bands,
     assessment,
     lastCycle,
+    executeRescue,
+    busy,
+    validation,
   } = useShield()
 
   // See ProtectionSuggestions: the comparison exists to audit a decision that
@@ -129,7 +132,16 @@ export default function StrategyComparison() {
       >
         <p className="text-sm text-ink">{explanation}</p>
         {selectedStrategy && (
-          <p className="mt-2 text-sm text-muted">{selectedStrategy.description}</p>
+          <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-hairline pt-3">
+            <p className="text-sm text-muted">{selectedStrategy.description}</p>
+            <Button
+              variant="primary"
+              disabled={busy || !validation?.can_execute}
+              onClick={() => executeRescue({ confirm: true })}
+            >
+              Execute selected strategy (simulated)
+            </Button>
+          </div>
         )}
       </Panel>
 
@@ -201,22 +213,33 @@ export default function StrategyComparison() {
         </div>
       </Panel>
 
-      <Panel title="Rejected candidates">
-        <ul className="flex flex-col gap-2">
-          {strategies
-            .filter((row) => row.status !== 'VIABLE')
-            .map((row) => (
-              <li key={row.strategy_type} className="flex flex-wrap items-baseline gap-2 text-sm">
-                <span className="text-ink">{row.name}</span>
-                <Badge tone={statusTone(row.status)}>{STATUS_LABEL_SHORT[row.status]}</Badge>
-                <span className="text-muted">{row.rejection_reason}</span>
+      <Panel
+        title="Why each candidate was accepted or rejected"
+        subtitle="Every reason is the engine's own, quoting the constraint that decided it."
+      >
+        <ul className="flex flex-col gap-2.5">
+          {strategies.map((row) => {
+            const accepted = row.status === 'VIABLE'
+            return (
+              <li
+                key={row.strategy_type}
+                className={`rounded-md border px-3.5 py-2.5 ${
+                  accepted ? 'border-safe/30 bg-safe/5' : 'border-hairline bg-panel-raised'
+                }`}
+              >
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="text-sm text-ink">{row.name}</span>
+                  <Badge tone={statusTone(row.status)}>{STATUS_LABEL_SHORT[row.status]}</Badge>
+                  {row.selected && <Badge tone="safe">selected</Badge>}
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-muted">
+                  {accepted
+                    ? row.acceptance_reason ?? 'Cleared every constraint.'
+                    : row.rejection_reason}
+                </p>
               </li>
-            ))}
-          {strategies.every((row) => row.status === 'VIABLE') && (
-            <li className="text-sm text-muted">
-              Every candidate cleared every constraint on this run.
-            </li>
-          )}
+            )
+          })}
         </ul>
       </Panel>
     </div>

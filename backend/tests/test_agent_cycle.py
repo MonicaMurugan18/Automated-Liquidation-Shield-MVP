@@ -200,15 +200,26 @@ def test_both_modes_select_the_same_strategy():
 # Stand-down paths
 # ---------------------------------------------------------------------------
 
-def test_a_shock_that_does_not_breach_the_trigger_generates_nothing():
-    """Edge case 1 through the cycle: a 2% dip leaves HF above the trigger."""
+def test_a_shock_that_does_not_breach_the_trigger_executes_nothing():
+    """A 2% dip leaves HF 1.225: below the 1.50 target, above the 1.20 trigger.
+
+    Options are offered, nothing runs, and the position is untouched."""
     result = agent_cycle.run_cycle(SEED, PREFS, MARKET, price_drop_pct=2.0)
 
     assert result.executed is False
     assert result.execution_status is ExecutionStatus.NO_ACTION_REQUIRED
-    assert result.strategies == []
-    assert _states(result) == ["ARMED", "ARMED", "ARMED", "ARMED"]
+    assert result.selected_strategy is None
+    assert result.strategies, "below target, the user should still see choices"
+    assert set(_states(result)) == {"ARMED"}
     assert result.assessment_final.health_factor == result.assessment_shocked.health_factor
+
+
+def test_a_position_above_target_generates_nothing_at_all():
+    safe = Position(debt_amount=1_000.0)          # HF 6.25
+    result = agent_cycle.run_cycle(safe, PREFS, MARKET, price_drop_pct=2.0)
+
+    assert result.strategies == []
+    assert result.executed is False
 
 
 def test_insufficient_liquidity_stands_the_agent_down():
@@ -370,8 +381,9 @@ def test_scenarios_flag_which_rungs_need_intervention():
     assert flags["Current"] is False
     assert flags["-5%"] is True
     assert flags["-20%"] is True
-    # None of those rungs is actually liquidatable yet.
-    assert all(not s.liquidatable for s in result.scenarios)
+    # The -20% rung is exactly HF 1.0, the liquidation threshold.
+    assert all(not s.liquidatable for s in result.scenarios[:-1])
+    assert result.scenarios[-1].liquidatable is True
 
 
 def test_a_safe_position_needs_no_intervention_anywhere_on_the_ladder():

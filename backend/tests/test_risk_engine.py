@@ -45,7 +45,7 @@ def test_zero_debt_reports_sentinel_infinite_health_factor():
     [
         (0.85, RiskLevel.LIQUIDATABLE),
         (0.999, RiskLevel.LIQUIDATABLE),
-        (1.0, RiskLevel.DANGER),
+        (1.0, RiskLevel.LIQUIDATABLE),
         (1.125, RiskLevel.DANGER),
         (1.199, RiskLevel.DANGER),
         (1.20, RiskLevel.WARNING),

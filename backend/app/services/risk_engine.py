@@ -41,7 +41,7 @@ from ..models.domain import (
 INFINITE_HF = 999.0
 
 # Risk bands, in Health Factor terms.
-#   HF <  1.00  -> LIQUIDATABLE  (a liquidator can act right now)
+#   HF <= 1.00  -> LIQUIDATABLE  (a liquidator can act right now)
 #   HF <  1.20  -> DANGER        (one bad candle away)
 #   HF <  1.50  -> WARNING       (below the default safety target)
 #   HF >= 1.50  -> SAFE
@@ -123,13 +123,31 @@ def health_factor(position: Position) -> float:
 
 def classify_risk(hf: float) -> RiskLevel:
     """Map a Health Factor onto a risk band."""
-    if hf < LIQUIDATION_HF:
+    if hf <= LIQUIDATION_HF:
         return RiskLevel.LIQUIDATABLE
     if hf < DANGER_HF:
         return RiskLevel.DANGER
     if hf < WARNING_HF:
         return RiskLevel.WARNING
     return RiskLevel.SAFE
+
+
+def price_at_health_factor(position: Position, target_hf: float) -> float:
+    """Collateral price at which the Health Factor would be exactly `target_hf`.
+
+        HF = (units * P * LT) / D   =>   P = HF * D / (units * LT)
+
+    Returns 0.0 when there is no debt or no collateral, where the question has
+    no meaningful answer -- read the risk level instead.
+    """
+    validate_position(position)
+    if target_hf <= 0:
+        raise ValidationError("Target Health Factor must be greater than zero.")
+    if position.debt_value <= 0 or position.collateral_amount <= 0:
+        return 0.0
+    return (target_hf * position.debt_value) / (
+        position.collateral_amount * position.liquidation_threshold
+    )
 
 
 def liquidation_price(position: Position) -> float:
@@ -141,12 +159,20 @@ def liquidation_price(position: Position) -> float:
     when there is no collateral but debt exists (already underwater at any
     price -- the caller should read the risk level, not this number).
     """
-    validate_position(position)
-    if position.debt_value <= 0 or position.collateral_amount <= 0:
-        return 0.0
-    return position.debt_value / (
-        position.collateral_amount * position.liquidation_threshold
-    )
+    return price_at_health_factor(position, LIQUIDATION_HF)
+
+
+def price_drop_to_health_factor_pct(position: Position, target_hf: float) -> float:
+    """How far the price can fall before HF reaches `target_hf`, in percent.
+
+    Negative when the position is already at or below that level. This is what
+    lets the advisor say "a 7% drop takes you to your intervention trigger"
+    rather than quoting a bare Health Factor at someone.
+    """
+    level = price_at_health_factor(position, target_hf)
+    if level <= 0:
+        return 100.0
+    return (position.collateral_price - level) / position.collateral_price * 100.0
 
 
 def price_drop_to_liquidation_pct(position: Position) -> float:

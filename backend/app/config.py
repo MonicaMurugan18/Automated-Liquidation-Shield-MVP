@@ -45,6 +45,11 @@ class Settings:
         os.getenv("DEFAULT_DEX_LIQUIDITY_USD", "2000000")
     )
 
+    # Demo loan: five ETH is a visible, realistic holding for the walkthrough
+    # and the debt is sized to remain protectable with the default wallet.
+    demo_collateral_amount: float = float(os.getenv("DEMO_COLLATERAL_AMOUNT", "5"))
+    demo_debt_amount: float = float(os.getenv("DEMO_DEBT_AMOUNT", "5800"))
+
     @property
     def supabase_enabled(self) -> bool:
         return bool(self.supabase_url and self.supabase_key)

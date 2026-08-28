@@ -108,10 +108,10 @@ export function toPositionPayload(position) {
   // price moves. Units win when present: they are price-independent, so a
   // re-evaluation after a shock stays correct. Dollars are what the form
   // collects, and the server converts them.
-  if (position.collateral_amount != null) {
-    payload.collateral_amount = position.collateral_amount
-  } else if (position.collateral_value != null) {
+  if (position.collateral_value != null) {
     payload.collateral_value = position.collateral_value
+  } else if (position.collateral_amount != null) {
+    payload.collateral_amount = position.collateral_amount
   }
   return payload
 }

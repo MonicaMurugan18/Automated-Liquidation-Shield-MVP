@@ -266,6 +266,7 @@ class ComparisonRow(BaseModel):
     score_breakdown: Dict[str, float]
     selected: bool
     rejection_reason: Optional[str] = None
+    acceptance_reason: Optional[str] = None
 
 
 class ComparisonResponse(BaseModel):
@@ -284,6 +285,18 @@ class ValidationResponse(BaseModel):
     shield_state: str
     economics: Dict[str, Any]
     selected_strategy: Optional[Dict[str, Any]] = None
+    guidance: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Plain-language advice for the Agent Decision panel: headline, "
+            "tone, summary and concrete suggestions. Generated server-side so "
+            "the frontend never decides what the advice is."
+        ),
+    )
+    future_risk: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="The -5/-10/-15/-20% ladder, for the Future Risk panel.",
+    )
 
 
 class RescueResponse(BaseModel):

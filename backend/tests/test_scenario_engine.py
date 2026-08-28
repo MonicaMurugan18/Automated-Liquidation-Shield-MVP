@@ -35,7 +35,7 @@ def test_risk_escalates_down_the_ladder():
     levels = [s.risk_level for s in scenario_engine.simulate(SEED)]
     assert levels[0] is RiskLevel.WARNING
     assert levels[2] is RiskLevel.DANGER
-    assert levels[4] is RiskLevel.DANGER  # HF exactly 1.0 is not yet liquidatable
+    assert levels[4] is RiskLevel.LIQUIDATABLE
 
 
 def test_health_factor_is_monotonically_decreasing():
@@ -50,17 +50,19 @@ def test_required_repayment_grows_as_price_falls():
     assert repayments[2] == pytest.approx(1250.0, abs=0.01)
 
 
-def test_seed_position_survives_the_default_ladder():
+def test_seed_position_reaches_liquidation_at_the_default_ladder_floor():
     scenarios = scenario_engine.simulate(SEED)
-    assert scenario_engine.first_breaking_scenario(scenarios) is None
-    assert "Survives the ladder, but only just" in scenario_engine.summarise(SEED, scenarios)
+    breaking = scenario_engine.first_breaking_scenario(scenarios)
+    assert breaking is not None
+    assert breaking.label == "-20%"
+    assert "liquidates" in scenario_engine.summarise(SEED, scenarios)
 
 
 def test_a_deeper_ladder_finds_the_breaking_point():
     scenarios = scenario_engine.simulate(SEED, drops=[0, 10, 20, 25, 30])
     breaking = scenario_engine.first_breaking_scenario(scenarios)
     assert breaking is not None
-    assert breaking.label == "-25%"
+    assert breaking.label == "-20%"
     assert breaking.liquidatable is True
 
 

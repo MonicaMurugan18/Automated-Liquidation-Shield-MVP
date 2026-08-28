@@ -218,6 +218,26 @@ def _finalise(
         return strategy
 
     strategy.status = StrategyStatus.VIABLE
+    # A comparison that only explains rejections is half a comparison: the
+    # reader still has to reverse-engineer why the survivors survived.
+    checks = [
+        f"restores HF {strategy.resulting_health_factor:.3f} "
+        f"(target {target_hf:.2f})"
+    ]
+    if strategy.required_capital > 0:
+        checks.append(
+            f"needs ${strategy.required_capital:,.0f} of the "
+            f"${prefs.available_capital:,.0f} available"
+        )
+    else:
+        checks.append("needs no wallet capital")
+    if strategy.slippage_pct > 0:
+        checks.append(
+            f"slippage {strategy.slippage_pct:.2f}% within the "
+            f"{prefs.max_slippage_pct:.2f}% limit"
+        )
+    checks.append(f"costs ${strategy.total_cost:,.2f}")
+    strategy.acceptance_reason = "Accepted: " + "; ".join(checks) + "."
     return strategy
 
 
@@ -641,8 +661,25 @@ def evaluate(
     market = market or MarketConditions(eth_price=position.collateral_price)
     assessment = risk_engine.assess(position, prefs)
 
-    # Edge case 1 / 6 -- healthy position, nothing to do.
-    if not assessment.requires_action:
+    idle_economics = {
+        "rescue_cost": 0.0,
+        "potential_loss": assessment.potential_liquidation_loss,
+        "net_benefit": 0.0,
+    }
+
+    # Generation is gated on being BELOW TARGET; execution is gated on the
+    # intervention trigger. Conflating the two was a real bug: a position at
+    # HF 1.264 with a 1.20 trigger and a 1.50 target reported "0 strategies
+    # generated" even though a $944 repayment would have restored the target,
+    # so the dashboard contradicted its own scenario ladder.
+    #
+    # Above target there is genuinely nothing to offer -- a "rescue" would
+    # move the position no closer to where the user asked it to be.
+    below_target = (
+        position.debt_value > 0
+        and assessment.health_factor < prefs.target_health_factor
+    )
+    if not below_target:
         return ProtectionDecision(
             assessment=assessment,
             strategies=[],
@@ -650,14 +687,39 @@ def evaluate(
             execution_status=ExecutionStatus.NO_ACTION_REQUIRED,
             shield_state=ShieldState.ARMED,
             explanation=assessment.message,
-            economics={
-                "rescue_cost": 0.0,
-                "potential_loss": assessment.potential_liquidation_loss,
-                "net_benefit": 0.0,
-            },
+            economics=idle_economics,
         )
 
     strategies = score_all(generate(position, prefs, market), position, prefs, market)
+
+    # Below target but above the trigger: the options are informational. No
+    # strategy is marked `selected`, because selection means "this is what
+    # will run", and nothing is going to run.
+    if not assessment.requires_action:
+        viable = [s for s in strategies if s.is_executable]
+        if viable:
+            cheapest = min(viable, key=lambda s: s.total_cost)
+            options = (
+                f" {len(viable)} protection option"
+                f"{'s' if len(viable) != 1 else ''} available if you want to "
+                f"rebuild the buffer now -- the cheapest is "
+                f"{cheapest.name.lower()} at ${cheapest.total_cost:,.2f}."
+            )
+        else:
+            options = (
+                " No protection option currently clears every constraint, but "
+                "none is needed at this Health Factor."
+            )
+        return ProtectionDecision(
+            assessment=assessment,
+            strategies=strategies,
+            selected_strategy=None,
+            execution_status=ExecutionStatus.NO_ACTION_REQUIRED,
+            shield_state=ShieldState.ARMED,
+            explanation=assessment.message + options,
+            economics=idle_economics,
+        )
+
     best = select_best(strategies)
 
     # Edge cases 3 / 4 / 7 -- every candidate broke a constraint.
