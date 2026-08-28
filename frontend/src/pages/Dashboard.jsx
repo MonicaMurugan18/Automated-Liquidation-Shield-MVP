@@ -64,6 +64,7 @@ export default function Dashboard() {
     preferences,
     assessment,
     validation,
+    strategies,
     selectedStrategy,
     explanation,
     lastRescue,
@@ -81,6 +82,9 @@ export default function Dashboard() {
   if (!assessment || !bands) return null
 
   const state = lookupState(shieldState)
+  const viableCount = strategies.filter(
+    (s) => s.is_executable ?? s.status === 'VIABLE',
+  ).length
   const advisoryHold = validation?.execution_status === 'AWAITING_CONFIRMATION'
   const stoodDown = validation?.execution_status?.startsWith('SKIPPED')
 
@@ -343,7 +347,22 @@ export default function Dashboard() {
             {/* ===================================================
                 EXECUTED RESCUE
             ==================================================== */}
-            {lastRescue?.executed ? (
+            {lastRescue && !lastRescue.executed ? (
+
+              /* =================================================
+                 EXECUTION ATTEMPTED, NOTHING RAN
+              ================================================== */
+              <div className="flex items-start gap-2.5 rounded-md border border-warn/40 bg-warn/10 px-3.5 py-3">
+                <CircleSlash size={18} className="mt-0.5 shrink-0 text-warn" aria-hidden="true" />
+                <div>
+                  <p className="font-display text-sm text-warn">
+                    No protection executed — no viable strategy.
+                  </p>
+                  <p className="mt-0.5 text-sm text-muted">{lastRescue.explanation}</p>
+                </div>
+              </div>
+
+            ) : lastRescue?.executed ? (
 
               <div className="flex flex-col gap-3">
 
@@ -592,6 +611,32 @@ export default function Dashboard() {
                   </Link>.
 
                 </p>
+
+                {/* The agent will not act above the trigger, but the options
+                    are real and a cautious user may want the buffer rebuilt
+                    now. Executing here is opt-in, never automatic. */}
+                {viableCount > 0 && (
+                  <div className="flex flex-col gap-2 border-t border-hairline pt-3">
+                    <p className="text-xs text-muted">
+                      {viableCount} protection option{viableCount === 1 ? '' : 's'} available
+                      if you would rather rebuild the buffer now.
+                    </p>
+                    <Button
+                      variant="primary"
+                      onClick={() => executeRescue({ confirm: true })}
+                      disabled={busy}
+                    >
+                      {busy ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                          Executing…
+                        </>
+                      ) : (
+                        'Execute Protection (simulated)'
+                      )}
+                    </Button>
+                  </div>
+                )}
 
               </div>
 

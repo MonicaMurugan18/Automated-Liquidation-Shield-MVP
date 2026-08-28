@@ -43,6 +43,7 @@ from ..services import (
     advisor,
     agent_cycle,
     assets,
+    execution,
     market_data,
     risk_engine,
     scenario_engine,
@@ -91,6 +92,7 @@ def health() -> HealthResponse:
             "scenario_engine": "ready",
             "strategy_engine": "ready",
             "blockchain": "simulated",
+            "settlement": execution.SETTLEMENT_SIMULATED,
         },
     )
 
@@ -302,32 +304,6 @@ def validate_rescue(request: StrategyRequest) -> ValidationResponse:
 # POST /api/rescue/autoexecute
 # ---------------------------------------------------------------------------
 
-def _simulated_transaction(decision: ProtectionDecision, position: Position) -> Dict[str, Any]:
-    """Build the record of a rescue that was never broadcast anywhere.
-
-    `simulated: True` and the `0xSIM...` hash prefix are deliberate: nothing
-    downstream should ever be able to mistake this for a real receipt.
-    """
-    strategy = decision.selected_strategy
-    return {
-        "tx_hash": "0xSIM" + uuid.uuid4().hex[:58],
-        "simulated": True,
-        "executed_at": datetime.now(timezone.utc).isoformat(),
-        "strategy_type": strategy.strategy_type.value if strategy else None,
-        "strategy_name": strategy.name if strategy else None,
-        "action_amount": strategy.action_amount if strategy else 0.0,
-        "total_cost": strategy.total_cost if strategy else 0.0,
-        "health_factor_before": decision.assessment.health_factor,
-        "health_factor_after": (
-            strategy.resulting_health_factor if strategy else decision.assessment.health_factor
-        ),
-        "collateral_price": position.collateral_price,
-        "execution_status": decision.execution_status.value,
-        "mode": None,  # filled by the caller
-        "explanation": decision.explanation,
-    }
-
-
 @router.post("/rescue/autoexecute", response_model=RescueResponse)
 def autoexecute_rescue(request: RescueRequest) -> RescueResponse:
     """Run one full agent cycle and, if warranted, execute the winner.
@@ -346,19 +322,45 @@ def autoexecute_rescue(request: RescueRequest) -> RescueResponse:
     assessment_before = decision.assessment.to_dict()
     strategies = [s.to_dict() for s in decision.strategies]
 
-    # Advisory mode holds unless the user has confirmed this specific
-    # recommendation. Autonomous mode never reaches this branch.
+    chosen = decision.selected_strategy
+    user_initiated = False
+
+    # `confirm` is the user pressing "Execute Protection". It authorises two
+    # different things:
+    #   1. Advisory mode: approve the recommendation the agent already made.
+    #   2. Below the trigger: opt in early. The agent would not act here, but
+    #      the options are real and the user may want the buffer rebuilt now.
+    # Without (2) the button would silently do nothing at WARNING, which is
+    # exactly where a cautious user is most likely to press it.
+    if chosen is None and request.confirm:
+        viable = [s for s in decision.strategies if s.is_executable]
+        if viable:
+            chosen = strategy_engine.select_best(decision.strategies)
+            user_initiated = True
+            strategies = [s.to_dict() for s in decision.strategies]
+
     holding_for_confirmation = (
         decision.execution_status is ExecutionStatus.AWAITING_CONFIRMATION
         and not request.confirm
     )
 
-    if decision.selected_strategy is None or holding_for_confirmation:
+    if chosen is None or holding_for_confirmation:
+        # Distinguish "nothing was needed" from "nothing was possible" -- the
+        # user asked for these to read differently.
+        if request.confirm and not decision.strategies:
+            explanation = "No protection executed — no viable strategy."
+        elif request.confirm and not any(s.is_executable for s in decision.strategies):
+            explanation = (
+                "No protection executed — no viable strategy. "
+                + decision.explanation
+            )
+        else:
+            explanation = decision.explanation
         return RescueResponse(
             executed=False,
             execution_status=decision.execution_status.value,
             shield_state=decision.shield_state.value,
-            explanation=decision.explanation,
+            explanation=explanation,
             economics=decision.economics,
             selected_strategy=(
                 decision.selected_strategy.to_dict()
@@ -369,24 +371,35 @@ def autoexecute_rescue(request: RescueRequest) -> RescueResponse:
             assessment_before=assessment_before,
         )
 
-    # --- simulated execution ------------------------------------------------
-    after = strategy_engine.apply_strategy(position, decision.selected_strategy)
+    # --- settlement (simulated) ---------------------------------------------
+    after = strategy_engine.apply_strategy(position, chosen)
     assessment_after = risk_engine.assess(after, prefs)
 
-    transaction = _simulated_transaction(decision, position)
-    transaction["mode"] = prefs.mode.value
-    transaction["health_factor_after"] = assessment_after.health_factor
-    transaction["execution_status"] = ExecutionStatus.EXECUTED.value
+    reason = (
+        f"User-initiated: {decision.explanation}" if user_initiated
+        else decision.explanation
+    )
+    receipt = execution.get_settlement().execute(
+        position=position,
+        strategy=chosen,
+        health_factor_before=decision.assessment.health_factor,
+        health_factor_after=assessment_after.health_factor,
+        mode=prefs.mode.value,
+        reason=reason,
+        user_initiated=user_initiated,
+    )
 
-    stored = get_repository().record_rescue(transaction)
+    record = receipt.to_dict()
+    record["execution_status"] = ExecutionStatus.EXECUTED.value
+    stored = get_repository().record_rescue(record)
 
     return RescueResponse(
         executed=True,
         execution_status=ExecutionStatus.EXECUTED.value,
         shield_state=ShieldState.PROTECTED.value,
-        explanation=decision.explanation,
+        explanation=reason,
         economics=decision.economics,
-        selected_strategy=decision.selected_strategy.to_dict(),
+        selected_strategy=chosen.to_dict(),
         strategies=strategies,
         assessment_before=assessment_before,
         assessment_after=assessment_after.to_dict(),
@@ -467,22 +480,17 @@ def simulate_drop(request: CycleRequest) -> Dict[str, Any]:
             )
 
     if result.executed:
-        transaction = {
-            "tx_hash": "0xSIM" + uuid.uuid4().hex[:58],
-            "simulated": True,
-            "executed_at": datetime.now(timezone.utc).isoformat(),
-            "strategy_type": result.selected_strategy.strategy_type.value,
-            "strategy_name": result.selected_strategy.name,
-            "action_amount": result.selected_strategy.action_amount,
-            "total_cost": result.selected_strategy.total_cost,
-            "health_factor_before": result.assessment_shocked.health_factor,
-            "health_factor_after": result.assessment_final.health_factor,
-            "collateral_price": result.price_after,
-            "execution_status": ExecutionStatus.EXECUTED.value,
-            "mode": prefs.mode.value,
-            "explanation": result.explanation,
-        }
-        payload["transaction"] = repo.record_rescue(transaction)
+        receipt = execution.get_settlement().execute(
+            position=result.position_shocked,
+            strategy=result.selected_strategy,
+            health_factor_before=result.assessment_shocked.health_factor,
+            health_factor_after=result.assessment_final.health_factor,
+            mode=prefs.mode.value,
+            reason=result.explanation,
+        )
+        record = receipt.to_dict()
+        record["execution_status"] = ExecutionStatus.EXECUTED.value
+        payload["transaction"] = repo.record_rescue(record)
 
     return payload
 
