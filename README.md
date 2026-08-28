@@ -17,11 +17,11 @@
 | **Institution** | Manakula vinayagar institute of technology |
 | **Problem statement / track** | Problem Statement No. 11 – Automated Liquidation Shield / Autonomous DeFi Liquidation Protection|
 
-| Name | Role | 
-| --- | --- | --- |
-| Monica.M | Team Leader|
-| lakshana.G | Member |
-| lakshitha | Member|
+| Name | Role |
+| --- | --- |
+| Monica.M | Team Leader |
+| Lakshana.G | Member |
+| Lakshitha | Member |
 <!-- TEAM:END -->
 
 ## At a glance
