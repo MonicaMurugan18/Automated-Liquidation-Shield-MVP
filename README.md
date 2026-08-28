@@ -1,7 +1,6 @@
 # Automated Liquidation Shield
 
-<!-- BADGES: the CI badge path is rewritten once the GitHub remote exists. -->
-[![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/ci.yml)
+[![CI](https://github.com/MonicaMurugan18/Automated-Liquidation-Shield-MVP/actions/workflows/ci.yml/badge.svg)](https://github.com/MonicaMurugan18/Automated-Liquidation-Shield-MVP/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2DD9A8.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-238%20passing-2DD9A8.svg)](#tests)
 [![Status](https://img.shields.io/badge/status-prototype%20%C2%B7%20simulated-E8A33D.svg)](#what-is-simulated)
