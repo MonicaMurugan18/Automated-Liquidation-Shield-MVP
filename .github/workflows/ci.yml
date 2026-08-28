@@ -111,8 +111,8 @@ jobs:
             echo "::error::A private key is committed."
             fail=1
           fi
-          # Supabase anon/service JWTs start with this header.
-          if git grep -nE 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9' -- . ; then
+          # Supabase anon/service JWTs are JWTs that start with this header.
+          if git grep -nE 'eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}' -- . ':!*.example' ; then
             echo "::error::A JWT that looks like a Supabase key is committed."
             fail=1
           fi
