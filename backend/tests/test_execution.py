@@ -35,11 +35,14 @@ def _receipt(position=RISKY):
     decision = strategy_engine.evaluate(position, PREFS, market)
     strategy = decision.selected_strategy or strategy_engine.select_best(decision.strategies)
     after = strategy_engine.apply_strategy(position, strategy)
+    hf_after = risk_engine.health_factor(after)
     return execution.get_settlement().execute(
         position=position,
         strategy=strategy,
         health_factor_before=decision.assessment.health_factor,
-        health_factor_after=risk_engine.health_factor(after),
+        health_factor_after=hf_after,
+        risk_before=decision.assessment.risk_level.value,
+        risk_after=risk_engine.classify_risk(hf_after).value,
         mode="AUTONOMOUS",
         reason=decision.explanation,
     )
@@ -52,7 +55,7 @@ def _receipt(position=RISKY):
 def test_a_simulated_hash_is_not_a_valid_transaction_hash():
     """0xSIM… cannot be confused with a real 32-byte hash: it is not hex."""
     r = _receipt()
-    assert r.tx_hash.startswith("0xSIM")
+    assert r.tx_hash.startswith("0xSIMULATED")
     body = r.tx_hash[2:]
     assert not all(c in "0123456789abcdefABCDEF" for c in body)
 
@@ -93,8 +96,9 @@ def test_the_receipt_has_every_required_field():
     d = _receipt().to_dict()
     for key in (
         "tx_hash", "executed_at", "strategy_type", "strategy_name",
-        "action_amount", "health_factor_before", "health_factor_after",
-        "status", "reason",
+        "action", "action_amount", "health_factor_before",
+        "health_factor_after", "risk_before", "risk_after",
+        "status", "status_label", "reason",
     ):
         assert key in d and d[key] not in (None, ""), key
 
@@ -248,3 +252,88 @@ def test_advisory_mode_holds_until_confirmed():
     done = client.post("/api/rescue/autoexecute", json={**payload, "confirm": True}).json()
     assert done["executed"] is True
     assert done["transaction"]["mode"] == "ADVISORY"
+
+
+# ---------------------------------------------------------------------------
+# The user naming a specific strategy
+# ---------------------------------------------------------------------------
+
+RISKY_BODY = {"position": {"collateral_price": 2700}}
+
+
+def test_the_user_can_execute_a_specific_strategy():
+    body = client.post(
+        "/api/rescue/autoexecute",
+        json={**RISKY_BODY, "confirm": True, "strategy_type": "ADD_COLLATERAL"},
+    ).json()
+
+    assert body["executed"] is True
+    assert body["selected_strategy"]["strategy_type"] == "ADD_COLLATERAL"
+    assert body["transaction"]["strategy_type"] == "ADD_COLLATERAL"
+    assert body["transaction"]["user_initiated"] is True
+
+
+def test_choosing_a_strategy_overrides_the_agents_pick():
+    auto = client.post("/api/rescue/autoexecute", json=RISKY_BODY).json()
+    assert auto["selected_strategy"]["strategy_type"] == "REPAY_DEBT"
+
+    chosen = client.post(
+        "/api/rescue/autoexecute",
+        json={**RISKY_BODY, "confirm": True, "strategy_type": "FLASH_LOAN_DELEVERAGE"},
+    ).json()
+    assert chosen["selected_strategy"]["strategy_type"] == "FLASH_LOAN_DELEVERAGE"
+
+
+def test_choosing_a_strategy_does_not_bypass_validation():
+    """Naming a rejected candidate must not be a way round the constraints."""
+    r = client.post(
+        "/api/rescue/autoexecute",
+        json={**RISKY_BODY, "confirm": True, "strategy_type": "PARTIAL_DELEVERAGE"},
+    )
+    assert r.status_code == 422
+    assert "cannot run" in r.json()["detail"]
+    assert client.get("/api/history").json()["transactions"] == []
+
+
+def test_an_unknown_strategy_name_is_rejected():
+    r = client.post(
+        "/api/rescue/autoexecute",
+        json={**RISKY_BODY, "confirm": True, "strategy_type": "SELL_EVERYTHING"},
+    )
+    assert r.status_code == 422
+    assert "not among the strategies" in r.json()["detail"]
+
+
+def test_a_user_chosen_strategy_still_lands_at_or_above_target():
+    body = client.post(
+        "/api/rescue/autoexecute",
+        json={**RISKY_BODY, "confirm": True, "strategy_type": "COLLATERAL_SWAP"},
+    ).json()
+    assert body["assessment_after"]["health_factor"] >= PREFS.target_health_factor - 1e-6
+
+
+# ---------------------------------------------------------------------------
+# The receipt fields the UI prints
+# ---------------------------------------------------------------------------
+
+def test_the_receipt_reports_risk_before_and_after():
+    tx = client.post("/api/rescue/autoexecute", json=RISKY_BODY).json()["transaction"]
+    assert tx["risk_before"] == "DANGER"
+    assert tx["risk_after"] == "SAFE"
+
+
+def test_the_status_label_is_the_one_the_ui_shows():
+    tx = client.post("/api/rescue/autoexecute", json=RISKY_BODY).json()["transaction"]
+    assert tx["status_label"] == "SIMULATED SUCCESS"
+
+
+def test_the_action_line_names_the_move_and_the_amount():
+    tx = client.post("/api/rescue/autoexecute", json=RISKY_BODY).json()["transaction"]
+    assert tx["action"].startswith("Repay debt $")
+    assert f"{tx['action_amount']:,.2f}" in tx["action"]
+
+
+def test_the_hash_cannot_be_looked_up_on_an_explorer():
+    tx = client.post("/api/rescue/autoexecute", json=RISKY_BODY).json()["transaction"]
+    assert tx["tx_hash"].startswith("0xSIMULATED")
+    assert not all(c in "0123456789abcdef" for c in tx["tx_hash"][2:].lower())

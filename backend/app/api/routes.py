@@ -325,6 +325,30 @@ def autoexecute_rescue(request: RescueRequest) -> RescueResponse:
     chosen = decision.selected_strategy
     user_initiated = False
 
+    # The user named a specific candidate. Honour it -- but only after the
+    # engine has confirmed it is one of the generated, viable options. Choosing
+    # a strategy must not be a way to bypass the constraint checks.
+    if request.strategy_type:
+        wanted = request.strategy_type.strip().upper()
+        match = next(
+            (s for s in decision.strategies if s.strategy_type.value == wanted), None
+        )
+        if match is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"{wanted} is not among the strategies generated for this "
+                    f"position."
+                ),
+            )
+        if not match.is_executable:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{match.name} cannot run: {match.rejection_reason}",
+            )
+        chosen = match
+        user_initiated = True
+
     # `confirm` is the user pressing "Execute Protection". It authorises two
     # different things:
     #   1. Advisory mode: approve the recommendation the agent already made.
@@ -384,6 +408,8 @@ def autoexecute_rescue(request: RescueRequest) -> RescueResponse:
         strategy=chosen,
         health_factor_before=decision.assessment.health_factor,
         health_factor_after=assessment_after.health_factor,
+        risk_before=decision.assessment.risk_level.value,
+        risk_after=assessment_after.risk_level.value,
         mode=prefs.mode.value,
         reason=reason,
         user_initiated=user_initiated,
@@ -485,6 +511,8 @@ def simulate_drop(request: CycleRequest) -> Dict[str, Any]:
             strategy=result.selected_strategy,
             health_factor_before=result.assessment_shocked.health_factor,
             health_factor_after=result.assessment_final.health_factor,
+            risk_before=result.assessment_shocked.risk_level.value,
+            risk_after=result.assessment_final.risk_level.value,
             mode=prefs.mode.value,
             reason=result.explanation,
         )

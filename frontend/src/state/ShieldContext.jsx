@@ -305,7 +305,7 @@ export function ShieldProvider({ children }) {
    * confirm button. Simulated end to end on the server.
    */
   const executeRescue = useCallback(
-    async ({ confirm = true } = {}) => {
+    async ({ confirm = true, strategyType = null } = {}) => {
       setBusy(true)
       setActivity('Executing rescue')
       // The only state the client asserts, and only because the request is
@@ -314,6 +314,7 @@ export function ShieldProvider({ children }) {
       setShieldState('PROTECTING')
       try {
         const body = { ...payloadFor(position, preferences, market), confirm }
+        if (strategyType) body.strategy_type = strategyType
         const result = await api.autoexecute(body)
         setLastRescue(result)
 

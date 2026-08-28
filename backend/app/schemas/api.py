@@ -202,13 +202,27 @@ class StrategyRequest(AnalyzeRequest):
 
 
 class RescueRequest(StrategyRequest):
-    """Autonomous execution request.
+    """Execution request.
 
-    `confirm` is only consulted in Advisory mode: it is the user pressing the
-    button on a recommendation the agent already made.
+    `confirm` is the user pressing "Execute Protection". It authorises the
+    agent's recommendation in Advisory mode, and opting in early below the
+    intervention trigger.
+
+    `strategy_type` lets the user execute a SPECIFIC candidate instead of the
+    auto-selected one. Omit it and the agent chooses -- which is the default,
+    and the whole point of Autonomous mode. The named strategy is still
+    validated against every constraint before it runs; picking one does not
+    bypass the checks.
     """
 
     confirm: bool = False
+    strategy_type: Optional[str] = Field(
+        default=None,
+        description=(
+            "Execute this specific candidate rather than the auto-selected "
+            "one. Must be one of the generated, viable strategies."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, CheckCircle2, CircleSlash, Info, Loader2 } from 'lucide-react'
 import { useShield } from '../state/ShieldContext'
@@ -82,6 +83,7 @@ export default function Dashboard() {
   if (!assessment || !bands) return null
 
   const state = lookupState(shieldState)
+  const [chosenStrategy, setChosenStrategy] = useState('')
   const viableCount = strategies.filter(
     (s) => s.is_executable ?? s.status === 'VIABLE',
   ).length
@@ -416,22 +418,46 @@ export default function Dashboard() {
 
                 </div>
 
+                {/* Receipt. Every field is the backend's; nothing here is
+                    computed or assumed in the browser. */}
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-md border border-hairline bg-panel-raised px-3.5 py-3 text-xs sm:grid-cols-3">
+                  {[
+                    ['Strategy', lastRescue.transaction.strategy_name],
+                    ['Action', lastRescue.transaction.action],
+                    ['Amount', fmtUsd(lastRescue.transaction.action_amount)],
+                    ['Previous HF', fmtHF(lastRescue.transaction.health_factor_before)],
+                    ['Resulting HF', fmtHF(lastRescue.transaction.health_factor_after)],
+                    [
+                      'Risk',
+                      `${lastRescue.transaction.risk_before} → ${lastRescue.transaction.risk_after}`,
+                    ],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="font-display text-[9px] tracking-[0.16em] text-muted uppercase">
+                        {label}
+                      </dt>
+                      <dd className="tabular mt-0.5 text-ink">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+
+                <div className="rounded-md border border-warn/40 bg-warn/10 px-3.5 py-2.5">
+                  <p className="font-display text-[11px] tracking-[0.14em] text-warn uppercase">
+                    Simulated transaction &middot; No real funds were moved
+                  </p>
+                  <p className="tabular mt-1 text-xs break-all text-muted">
+                    Status:{' '}
+                    <span className="text-ink">{lastRescue.transaction.status_label}</span>
+                    {' · '}
+                    Transaction ID:{' '}
+                    <span className="text-ink">{lastRescue.transaction.tx_hash}</span>
+                  </p>
+                </div>
+
                 <p className="text-xs text-muted">
-
-                  Simulated transaction{' '}
-                  {lastRescue.transaction.tx_hash.slice(
-                    0,
-                    14,
-                  )}
-                  … ·{' '}
-
-                  <Link
-                    to="/portal/history"
-                    className="text-ink underline underline-offset-2"
-                  >
-                    view in history
+                  <Link to="/portal/history" className="text-ink underline underline-offset-2">
+                    View in Rescue History
                   </Link>
-
                 </p>
 
               </div>
@@ -621,9 +647,33 @@ export default function Dashboard() {
                       {viableCount} protection option{viableCount === 1 ? '' : 's'} available
                       if you would rather rebuild the buffer now.
                     </p>
+                    <label className="flex flex-col gap-1">
+                      <span className="font-display text-[10px] tracking-[0.14em] text-muted uppercase">
+                        Strategy
+                      </span>
+                      <select
+                        value={chosenStrategy}
+                        onChange={(e) => setChosenStrategy(e.target.value)}
+                        className="rounded-md border border-hairline bg-base px-3 py-2 font-display text-sm text-ink outline-none focus:border-safe"
+                      >
+                        <option value="">Let the agent choose</option>
+                        {strategies
+                          .filter((s) => s.is_executable ?? s.status === 'VIABLE')
+                          .map((s) => (
+                            <option key={s.strategy_type} value={s.strategy_type}>
+                              {s.name}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
                     <Button
                       variant="primary"
-                      onClick={() => executeRescue({ confirm: true })}
+                      onClick={() =>
+                        executeRescue({
+                          confirm: true,
+                          strategyType: chosenStrategy || null,
+                        })
+                      }
                       disabled={busy}
                     >
                       {busy ? (

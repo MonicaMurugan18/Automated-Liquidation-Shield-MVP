@@ -15,7 +15,8 @@ This build has no wallet, no signer, no RPC endpoint and no contract. Rather
 than half-build one for a demo, execution is simulated and labelled as such
 everywhere it surfaces:
 
-  * every hash is prefixed `0xSIM`, which is not a valid transaction hash
+  * every hash is prefixed `0xSIMULATED`, which is not valid hex and so
+    cannot be looked up on any explorer
   * `simulated` is True and `settlement` is "SIMULATED" on every receipt
   * `network` is "simulated", never a chain name
 
@@ -41,12 +42,26 @@ from typing import Any, Dict, Optional, Protocol
 
 from ..models.domain import Position, Strategy
 
-#: Prefix that marks a hash as fabricated. Deliberately not valid hex-64.
-SIMULATED_HASH_PREFIX = "0xSIM"
+#: Prefix that marks a hash as fabricated. Deliberately not valid hex, so it
+#: can never be mistaken for -- or looked up as -- a real transaction hash.
+SIMULATED_HASH_PREFIX = "0xSIMULATED"
 
 STATUS_SUCCESS = "SUCCESS"
 STATUS_FAILED = "FAILED"
 SETTLEMENT_SIMULATED = "SIMULATED"
+
+#: What the UI shows. One string, so the label can never drift from the fact
+#: that this was a simulation.
+STATUS_LABEL_SIMULATED_SUCCESS = "SIMULATED SUCCESS"
+
+#: Short imperative for each strategy, for the "Action" line on a receipt.
+ACTION_VERB = {
+    "REPAY_DEBT": "Repay debt",
+    "ADD_COLLATERAL": "Deposit collateral",
+    "COLLATERAL_SWAP": "Swap collateral and repay",
+    "FLASH_LOAN_DELEVERAGE": "Flash-loan deleverage",
+    "PARTIAL_DELEVERAGE": "Partial debt repayment",
+}
 
 
 @dataclass
@@ -61,16 +76,20 @@ class ExecutionReceipt:
     network: str
     settlement: str
     status: str
+    status_label: str
     simulated: bool
     executed_at: str
 
     strategy_type: Optional[str]
     strategy_name: Optional[str]
+    action: str
     action_amount: float
     total_cost: float
 
     health_factor_before: float
     health_factor_after: float
+    risk_before: str
+    risk_after: str
     collateral_price: float
 
     mode: Optional[str] = None
@@ -94,6 +113,8 @@ class Settlement(Protocol):
         strategy: Strategy,
         health_factor_before: float,
         health_factor_after: float,
+        risk_before: str,
+        risk_after: str,
         mode: Optional[str] = None,
         reason: str = "",
         user_initiated: bool = False,
@@ -117,23 +138,30 @@ class SimulatedSettlement:
         strategy: Strategy,
         health_factor_before: float,
         health_factor_after: float,
+        risk_before: str,
+        risk_after: str,
         mode: Optional[str] = None,
         reason: str = "",
         user_initiated: bool = False,
     ) -> ExecutionReceipt:
+        kind = strategy.strategy_type.value
         return ExecutionReceipt(
-            tx_hash=SIMULATED_HASH_PREFIX + uuid.uuid4().hex[:58],
+            tx_hash=SIMULATED_HASH_PREFIX + uuid.uuid4().hex[:50],
             network="simulated",
             settlement=SETTLEMENT_SIMULATED,
             status=STATUS_SUCCESS,
+            status_label=STATUS_LABEL_SIMULATED_SUCCESS,
             simulated=True,
             executed_at=datetime.now(timezone.utc).isoformat(),
-            strategy_type=strategy.strategy_type.value,
+            strategy_type=kind,
             strategy_name=strategy.name,
+            action=f"{ACTION_VERB.get(kind, strategy.name)} ${strategy.action_amount:,.2f}",
             action_amount=strategy.action_amount,
             total_cost=strategy.total_cost,
             health_factor_before=round(health_factor_before, 4),
             health_factor_after=round(health_factor_after, 4),
+            risk_before=risk_before,
+            risk_after=risk_after,
             collateral_price=position.collateral_price,
             mode=mode,
             reason=reason,
