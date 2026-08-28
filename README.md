@@ -19,10 +19,9 @@
 
 | Name | Role | GitHub |
 | --- | --- | --- |
-| `_TO BE FILLED_` | `_TO BE FILLED_` | [@handle](https://github.com/handle) |
-| `_TO BE FILLED_` | `_TO BE FILLED_` | [@handle](https://github.com/handle) |
-| `_TO BE FILLED_` | `_TO BE FILLED_` | [@handle](https://github.com/handle) |
-| `_TO BE FILLED_` | `_TO BE FILLED_` | [@handle](https://github.com/handle) |
+| `_Monica.M_` | `_Team Leader_` |
+| `_lakshana.G_` | `_Member_` |
+| `_lakshitha_` | `_Member_` |
 <!-- TEAM:END -->
 
 ## At a glance
