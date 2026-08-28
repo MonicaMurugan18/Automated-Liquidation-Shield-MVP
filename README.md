@@ -8,7 +8,7 @@
 
 **Autonomous, scenario-driven liquidation protection for a DeFi lending position.**
 
-<!-- TEAM:START — replace every placeholder below before submitting. -->
+<!-- TEAM:START -->
 ## Team
 
 | | |
@@ -33,6 +33,116 @@
 | **Tests** | 238, covering the engines, the API and all eight edge cases |
 | **Blockchain** | **None.** Fully simulated — see [What is simulated](#what-is-simulated) |
 | **Run it** | [Quick start](#quick-start) — two terminals, no credentials needed |
+
+## The problem
+
+In DeFi lending platforms, users deposit crypto assets as collateral and borrow
+against them. When the collateral price falls, the user's Health Factor
+decreases and the risk of liquidation rises.
+
+The real difficulty is not spotting that risk — it is that **users cannot see
+how a future price drop will affect their position, or which protection action
+would be most suitable.** Deciding what to do manually, during a market that is
+moving quickly, is harder still.
+
+So this project predicts potential liquidation risk, evaluates different future
+scenarios, and selects the most suitable protection strategy.
+
+> **In one line:** the system predicts how a DeFi position may behave under
+> future price drops, generates and scores multiple protection strategies, and
+> autonomously selects the best one to prevent liquidation.
+
+### Why this is not just risk detection
+
+Detecting liquidation risk is table stakes. The question this system answers is
+the harder one — *what could happen next, and what is the best action to
+protect the position?*
+
+```
+Risk detection                    ← where most tools stop
+      ↓
+Scenario prediction               ← how the position behaves under -5/-10/-15/-20%
+      ↓
+Multiple strategies               ← five candidate interventions, generated and priced
+      ↓
+Strategy scoring                  ← safety, cost, slippage, liquidity, capital
+      ↓
+Autonomous selection              ← the agent picks, and executes, without asking
+```
+
+### The pipeline, end to end
+
+```
+Position details (collateral asset, amount, price, debt)
+      ↓
+1. Calculate the current Health Factor
+      ↓
+2. Identify the current risk level
+      ↓
+3. Simulate future price-drop scenarios     Current / -5% / -10% / -15% / -20%
+      ↓
+4. Calculate the future Health Factor for each scenario
+      ↓
+5. Determine the required protection / intervention per scenario
+      ↓
+6. Generate multiple protection suggestions
+      ↓
+7. Compare the possible strategies
+      ↓
+8. Select the most suitable strategy  →  simulated execution  →  final Health Factor
+```
+
+---
+
+## Specification traceability
+
+Every claim below is backed by code you can read and a check you can run.
+
+| # | Specification | Where it lives | How to verify |
+| --- | --- | --- | --- |
+| 1 | **User input** — the user enters their own position, not fixed values | [`PositionForm.jsx`](frontend/src/components/PositionForm.jsx), [`assets.py`](backend/app/services/assets.py) | Enter any position at `/portal`; 7 collateral assets, each with its own liquidation tier |
+| 2 | **Health Factor** and risk level (Safe → Warning → Risk) | [`risk_engine.py`](backend/app/services/risk_engine.py) | `pytest tests/test_risk_engine.py` — 4 bands: SAFE / WARNING / DANGER / LIQUIDATABLE |
+| 3 | **Scenario prediction** at −5/−10/−15/−20% | [`scenario_engine.py`](backend/app/services/scenario_engine.py) | `POST /api/scenario/simulate`, or the Scenarios page |
+| 4 | **Risk visualisation** — gauge, charts, indicators | [`HealthFactorGauge.jsx`](frontend/src/components/HealthFactorGauge.jsx), [`ScenarioPrediction.jsx`](frontend/src/pages/ScenarioPrediction.jsx) | Radial shield-arc gauge; Recharts line marking target, trigger and liquidation |
+| 5 | **Protection suggestions** — repay, add collateral, swap, liquidity-based | [`strategy_engine.py`](backend/app/services/strategy_engine.py) | 5 candidates: `REPAY_DEBT`, `ADD_COLLATERAL`, `COLLATERAL_SWAP`, `FLASH_LOAN_DELEVERAGE`, `PARTIAL_DELEVERAGE` |
+| 6 | **Strategy comparison** on safety, cost, slippage, gas, resulting HF | [`strategy_engine.py`](backend/app/services/strategy_engine.py) | Comparison page; 5 weighted sub-scores plus gas and flash-fee columns |
+| 7 | **Autonomous selection** of the best-scored strategy | [`agent_cycle.py`](backend/app/services/agent_cycle.py) | Autonomous mode selects *and executes*; Advisory mode stops at the recommendation |
+| 8 | **Demo mode** — simulated ETH price drop, end to end | [`DemoControls.jsx`](frontend/src/components/DemoControls.jsx), `POST /api/demo/simulate-drop` | "Simulate 10% ETH drop"; status walks ARMED → ALERT → PROTECTING → PROTECTED → ARMED |
+| 9 | **Backend** — Python + FastAPI, separate engines | [`backend/app/services/`](backend/app/services/) | `risk_engine.py`, `scenario_engine.py`, `strategy_engine.py`, orchestrated by `agent_cycle.py` |
+| 10 | **Frontend** — React + Tailwind CSS | [`frontend/src/`](frontend/src/) | React 19, Vite, Tailwind v4, Recharts |
+| 11 | **Blockchain simulated** — no wallets, contracts, flash loans or real transactions | [What is simulated](#what-is-simulated) | No web3 dependency in `package.json`; receipts flagged `simulated: true`, hashes prefixed `0xSIM` |
+
+### Two notes on how the build reads against the spec
+
+**Input shape.** The spec lists the input as *collateral value*. The form asks
+instead for **collateral amount and current price**, and the backend derives
+the value. This is deliberate: holding units rather than a dollar figure is
+what lets a price shock re-value the position automatically, which the whole
+scenario engine depends on. The collateral *value* is displayed everywhere the
+spec expects it.
+
+**"Liquidity-based protection".** This is implemented as `FLASH_LOAN_DELEVERAGE`
+— a candidate that models an atomic flash-borrow with the Aave v3 0.09%
+premium. It is **arithmetic only**. No flash loan is taken, quoted or
+requested; nothing touches a protocol. It exists so the agent has a
+zero-capital option to weigh against the others.
+
+### Beyond the specification
+
+Three things the build does that the spec does not require:
+
+- **Executes the selected strategy** (simulated) and recomputes the final
+  Health Factor, rather than stopping at a recommendation.
+- **Rejects invalid strategies with reasons** — excessive slippage,
+  insufficient liquidity, insufficient capital, cannot restore target — and
+  runs an **economic viability check** that stands the agent down when a rescue
+  would cost more than the liquidation it prevents.
+- **Decision trace** — an auditable record of every stage, so the autonomous
+  choice can be inspected after the fact rather than taken on trust.
+
+---
+
+## How it works
 
 The system watches a borrow position continuously. When the Health Factor
 crosses the intervention trigger, it projects the position forward through a
