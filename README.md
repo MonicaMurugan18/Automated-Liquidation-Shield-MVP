@@ -1,7 +1,5 @@
 # Automated Liquidation Shield
 
-[![CI](https://github.com/MonicaMurugan18/Automated-Liquidation-Shield-MVP/actions/workflows/ci.yml/badge.svg)](https://github.com/MonicaMurugan18/Automated-Liquidation-Shield-MVP/actions/workflows/ci.yml)
-
 **Autonomous, scenario-driven liquidation protection for a DeFi lending position.**
 
 <!-- TEAM:START -->
