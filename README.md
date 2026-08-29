@@ -1,9 +1,6 @@
 # Automated Liquidation Shield
 
 [![CI](https://github.com/MonicaMurugan18/Automated-Liquidation-Shield-MVP/actions/workflows/ci.yml/badge.svg)](https://github.com/MonicaMurugan18/Automated-Liquidation-Shield-MVP/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-2DD9A8.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-238%20passing-2DD9A8.svg)](#tests)
-[![Status](https://img.shields.io/badge/status-prototype%20%C2%B7%20simulated-E8A33D.svg)](#what-is-simulated)
 
 **Autonomous, scenario-driven liquidation protection for a DeFi lending position.**
 
@@ -746,12 +743,46 @@ module docstring):
 
 ---
 
-## Future blockchain integration
+## ⛓️ Blockchain Integration
 
-**None of this is required for the current prototype, and none of it is
-implemented.** There is no wallet connection, no smart contract, no flash loan
-and no transaction of any kind. The prototype is complete and demonstrable
-exactly as it stands; this section describes a later phase.
+Blockchain technology is planned as the execution layer of the Automated Liquidation Shield.
+
+The purpose of using blockchain is to make the protection process transparent, verifiable, and suitable for automated DeFi transactions.
+
+### Current Implementation
+
+In the current hackathon MVP, blockchain execution is **simulated**.
+
+The system does not connect to a real blockchain, does not require a wallet, and does not transfer real cryptocurrency.
+
+Instead, the system demonstrates the complete execution workflow using a simulated transaction receipt.
+
+### Simulated Blockchain Workflow
+
+```text
+User DeFi Position
+       ↓
+Risk Detection
+       ↓
+Scenario Analysis
+       ↓
+Protection Strategy Generation
+       ↓
+Strategy Comparison
+       ↓
+User Selects Strategy
+       ↓
+Strategy Validation
+       ↓
+Simulated Blockchain Execution
+       ↓
+Simulated Transaction Receipt
+       ↓
+Position Recalculation
+       ↓
+Updated Health Factor
+       ↓
+Rescue History
 
 A future version could integrate:
 
