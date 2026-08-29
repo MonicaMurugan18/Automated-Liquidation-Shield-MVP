@@ -713,19 +713,40 @@ confused. Writes are best-effort: a logging failure never takes down a rescue.
 
 ## What is simulated
 
-| Component | Status |
-| --- | --- |
+| **Component** | **Status** |
+|---|---|
 | Health Factor, risk classification, liquidation price | **Real logic**, simplified single-asset model |
-| Repayment / top-up / deleverage sizing | **Real formulas**, derived in the docstrings |
+| Repayment / top-up / deleverage sizing | **Real formulas** |
 | Strategy generation, scoring, selection | **Real logic** |
 | Economic viability and constraint checks | **Real logic** |
-| ETH spot price | **REAL** — public market API, see [Market data](#market-data) |
-| Scenario prices (−5/−10/−15/−20%) | Simulated projections derived from the real price |
-| Gas price | Simulated — `gas_units × gwei × price`, no gas oracle |
-| DEX liquidity and slippage | Simulated — constant-product shape, no pool query |
-| Flash loan | Simulated — the Aave v3 0.09% premium as arithmetic only |
-| Execution | Simulated — nothing signed, nothing broadcast, `0xSIM` hashes |
-| Wallet / account abstraction | Not present |
+| ETH/USD spot price | **REAL** — obtained from public market-data APIs |
+| Scenario prices (-5% / -10% / -15% / -20%) | **Simulated projections** derived from the real ETH price |
+| Gas price | **Simulated** — modeled calculation, no gas oracle |
+| DEX liquidity and slippage | **Simulated** — modeled calculation, no live pool query |
+| Flash loan | **Simulated** — Aave v3 0.09% premium modeled arithmetically; no real flash loan |
+| Blockchain execution | **Simulated** — no transaction signing or broadcasting; uses `0xSIM` hashes |
+| Wallet / account abstraction | **Not present** |
+
+### Blockchain Status
+
+The current hackathon MVP does **not** connect to a real blockchain.
+
+There is:
+
+- No real wallet connection
+- No smart contract deployment
+- No real flash loan
+- No real transaction signing
+- No real transaction broadcasting
+- No real cryptocurrency transfer
+
+The selected protection strategy is executed through a **simulated execution flow** and produces a simulated transaction receipt. :contentReference[oaicite:1]{index=1}
+
+### Real Market Data
+
+The current ETH/USD spot price is real and is obtained through public market-data APIs. The backend tries Coinbase, CoinGecko, and Kraken in order. :contentReference[oaicite:2]{index=2}
+
+The scenario engine then uses that real price to calculate the `-5%`, `-10%`, `-15%`, and `-20%` what-if scenarios. These are stress-test scenarios, not predictions of the future ETH price. :contentReference[oaicite:3]{index=3}
 
 The simplifications in the risk model, stated plainly (they are also in the
 module docstring):
