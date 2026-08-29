@@ -778,112 +778,132 @@ Instead, the system demonstrates the complete execution workflow using a simulat
 
 ### Simulated Blockchain Workflow
 
+The current hackathon MVP demonstrates the blockchain execution flow through simulation. The system does not sign or broadcast real blockchain transactions.
+
 ```text
-User DeFi Position
-       ↓
 Risk Detection
-       ↓
+      ↓
 Scenario Analysis
-       ↓
+      ↓
 Protection Strategy Generation
-       ↓
+      ↓
 Strategy Comparison
-       ↓
+      ↓
 User Selects Strategy
-       ↓
+      ↓
 Strategy Validation
-       ↓
+      ↓
 Simulated Blockchain Execution
-       ↓
+      ↓
 Simulated Transaction Receipt
-       ↓
+      ↓
 Position Recalculation
-       ↓
+      ↓
 Updated Health Factor
-       ↓
+      ↓
 Rescue History
-
-A future version could integrate:
-
-- **Wallet connection** — read a real account's positions instead of a typed form
-- **Smart contracts** — a protection contract that performs the rescue atomically
-- **Lending protocols** — live Aave v3 reserve data and `getUserAccountData`
-- **DEX swaps** — real Uniswap v3 routing and quotes in place of the modelled pool
-- **Flash loans / flash liquidity** — a real Aave premium on a real flashed amount
-- **Real transaction execution** — signing and broadcasting, with the simulated
-  path kept as a dry run
-
-Today the chain half of that pipeline is replaced by one step:
-
-Later it becomes:
-
 ```
-Strategy Engine → Smart Contract → Lending Protocol → DEX → Flash Liquidity
-```
+
+### How the Simulation Works
+
+1. **Risk Detection**  
+   The backend calculates the current Health Factor and determines the position's risk level.
+
+2. **Scenario Analysis**  
+   The system evaluates how the position could behave under different ETH price scenarios such as `-5%`, `-10%`, `-15%`, and `-20%`.
+
+3. **Protection Strategy Generation**  
+   The backend generates possible protection strategies such as debt repayment, collateral top-up, and deleveraging.
+
+4. **Strategy Comparison**  
+   Each strategy is checked against constraints such as available capital, required amount, expected Health Factor, cost, and risk after execution.
+
+5. **User Selects Strategy**  
+   The user can select a feasible protection strategy from the available recommendations.
+
+6. **Strategy Validation**  
+   The backend validates the selected strategy before execution and checks whether it satisfies the required constraints.
+
+7. **Simulated Blockchain Execution**  
+   The selected strategy is processed through the simulated blockchain execution layer.
+
+8. **Simulated Transaction Receipt**  
+   The system generates a simulated transaction receipt containing execution information. No real transaction is signed or broadcast.
+
+9. **Position Recalculation**  
+   After the simulated execution, the position is recalculated using the updated collateral and debt values.
+
+10. **Updated Health Factor**  
+    The system calculates the new Health Factor and displays the updated risk status.
+
+11. **Rescue History**  
+    The simulated execution is recorded in the application's rescue history for demonstration purposes.
+
+### Blockchain Execution Status
+
+| Component | Current MVP |
+|---|---|
+| Blockchain network | Simulated |
+| Smart contract | Not deployed |
+| Wallet connection | Not implemented |
+| Transaction signing | Simulated |
+| Transaction broadcasting | Not implemented |
+| Real cryptocurrency transfer | No |
+| Transaction receipt | Simulated |
+| Rescue execution | Simulated |
+
+> **Important:** The blockchain execution layer is simulated for the hackathon demonstration. The core risk analysis, Health Factor calculation, scenario analysis, strategy generation, strategy comparison, and recommendation logic are implemented in the application.
+
+---
+
 ## 🔮 Future Real-Blockchain Integration
 
-The current MVP uses simulated blockchain execution for the hackathon demonstration. The architecture is designed so that the simulated components can be replaced with real blockchain infrastructure without rewriting the core risk and strategy engines.
+The simulated execution layer can later be replaced with real blockchain infrastructure.
 
-The integration can be completed in the following order:
+### Planned Integration
 
-### 1. Price Feed
+1. **Chainlink Price Feed**  
+   Replace the current market-price source with an on-chain Chainlink price feed.
 
-Replace `MarketConditions.eth_price` with a Chainlink aggregator read.
+2. **Aave Position Data**  
+   Replace the demo position with real Aave account data using `getUserAccountData`.
 
-This can be isolated to the price-feed layer without changing the downstream engine interfaces.
+3. **Real Gas Estimation**  
+   Replace the simulated gas calculation with an EIP-1559 gas-fee estimate.
 
-### 2. Position Read
+4. **DEX Integration**  
+   Replace simulated liquidity and slippage calculations with real Uniswap v3 Quoter and pool-liquidity data.
 
-Replace the demo `Position` construction with Aave's `getUserAccountData`.
+5. **Protection Smart Contract**  
+   Deploy a smart contract capable of executing supported protection strategies atomically.
 
-The protocol's Health Factor can then be used instead of the locally calculated value while keeping the rest of the engine interface unchanged.
+6. **Wallet Integration**  
+   Integrate a Web3 wallet such as MetaMask for user authorization and transaction signing.
 
-### 3. Gas Oracle
+7. **Continuous Monitoring**  
+   Replace request-based evaluation with a continuously running blockchain monitoring service.
 
-Replace `estimate_gas_cost` with a real EIP-1559 gas-fee estimate.
+### Future Blockchain Flow
 
-This would allow the system to calculate transaction costs using current network conditions.
+```text
+User Wallet
+      ↓
+React Frontend
+      ↓
+FastAPI Backend
+      ↓
+Risk & Strategy Engine
+      ↓
+Protection Smart Contract
+      ↓
+DeFi Protocol
+      ↓
+Blockchain
+      ↓
+Transaction Confirmation
+```
 
-### 4. DEX Quoter
-
-Replace:
-
-- `estimate_slippage_pct`
-- `has_sufficient_liquidity`
-
-with real Uniswap v3 Quoter calls and live pool-depth information.
-
-This would provide more accurate estimates of slippage and liquidity. The current constant-product model is only a stand-in for real tick-based liquidity.
-
-### 5. Protection Smart Contract
-
-Introduce a smart contract capable of:
-
-1. Taking a flash loan
-2. Repaying the user's debt
-3. Withdrawing and swapping collateral when required
-4. Rebalancing the position
-5. Repaying the flash loan atomically
-
-The existing `strategy_engine.apply_strategy` function provides the logical call site for this execution layer.
-
-### 6. Signing and Transaction Submission
-
-Add a secure keeper wallet or session-key mechanism with an appropriate spending limit.
-
-Transactions could then be submitted through a private mempool to reduce the risk of front-running during a protection operation.
-
-### 7. Continuous Monitoring
-
-The current agent evaluates the position when requested.
-
-A production deployment would use a continuously running, block-subscribed worker that monitors the position and triggers evaluation when the Health Factor reaches the configured intervention threshold.
-
-### Architecture Compatibility
-
-Steps 1–4 are isolated behind existing interfaces and therefore do not require changes to the core risk and strategy engines.
-
-Steps 5–7 introduce new infrastructure required for real on-chain execution and continuous monitoring rather than requiring a complete rewrite of the existing system.
+> The current implementation is a hackathon MVP. Real on-chain execution is planned as a future extension and is not used to move real user funds in the current version.
 
 ---
 
@@ -923,6 +943,28 @@ Check the backend health endpoint:
 
 ```text
 http://localhost:8001/api/health
+```
 
+Make sure the FastAPI backend is running before starting or using the frontend.
 
+### `pip install` fails while building `pydantic-core`
+
+This can occur when using a newer Python version with an older pinned Pydantic version.
+
+The project requirements should use a compatible Pydantic version. If `requirements.txt` has been modified, ensure that Pydantic is compatible with the Python version being used.
+
+### Health says `"persistence": "in-memory"` with Supabase configured
+
+This means the Supabase credentials may be missing, invalid, or the Supabase project may be unreachable.
+
+The backend is designed to fall back to in-memory persistence instead of failing completely.
+
+Check:
+
+- Supabase environment variables
+- Backend console logs
+- Supabase project availability
+- Network connectivity
+
+---
 
