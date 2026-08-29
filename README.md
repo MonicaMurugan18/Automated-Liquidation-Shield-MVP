@@ -815,103 +815,114 @@ A future version could integrate:
 
 Today the chain half of that pipeline is replaced by one step:
 
-```
-Strategy Engine → Simulated Execution → Verification
-```
-
 Later it becomes:
 
 ```
 Strategy Engine → Smart Contract → Lending Protocol → DEX → Flash Liquidity
 ```
+## 🔮 Future Real-Blockchain Integration
 
-The seams are already isolated. In rough order:
+The current MVP uses simulated blockchain execution for the hackathon demonstration. The architecture is designed so that the simulated components can be replaced with real blockchain infrastructure without rewriting the core risk and strategy engines.
 
-1. **Price feed** — replace `MarketConditions.eth_price` with a Chainlink
-   aggregator read. One function, no downstream changes.
-2. **Position read** — replace `Position` construction with Aave's
-   `getUserAccountData`, and swap `risk_engine.health_factor` for the
-   protocol's own figure. The rest of the engine consumes the same interface.
-3. **Gas oracle** — replace `estimate_gas_cost` with an EIP-1559 fee estimate.
-4. **DEX quoter** — replace `estimate_slippage_pct` and
-   `has_sufficient_liquidity` with a Uniswap v3 Quoter call and real pool
-   depth. This is the largest fidelity gain: the constant-product shape is a
-   stand-in for real tick liquidity.
-5. **Protection contract** — a contract that takes a flash loan, repays debt,
-   withdraws and swaps collateral, and repays the loan atomically.
-   `strategy_engine.apply_strategy` is the call site.
-6. **Signing and submission** — a keeper wallet or session key with a spend
-   limit, plus private-mempool submission so the rescue is not front-run.
-7. **Continuous monitoring** — the agent currently evaluates on request. A real
-   deployment needs a block-subscribed worker loop.
+The integration can be completed in the following order:
 
-None of steps 1–4 change any engine's interface. Steps 5–7 are new
-infrastructure, not rewrites.
+### 1. Price Feed
 
----
+Replace `MarketConditions.eth_price` with a Chainlink aggregator read.
 
-## Known limitations
+This can be isolated to the price-feed layer without changing the downstream engine interfaces.
 
-- **Not investment advice, and not audited.** This is a hackathon MVP.
-- The demo position lives in browser memory. A page reload resets it to the
-  seed — only executed rescues persist.
-- Single position, single user. There is no auth; the backend writes as a fixed
-  demo user id.
-- One collateral and one debt asset per position. Real accounts hold baskets,
-  and a real Health Factor sums each reserve at its own threshold.
-- Only ETH has a live price. Every other asset uses the figure you type, and
-  nothing stops you entering a BTC price of $9.
-- The live price is a spot read, not an oracle. A real protocol values
-  collateral with a lagging oracle, so its view of your Health Factor can
-  differ from spot for a few blocks.
-- Scenarios are deterministic instantaneous shocks with no probability
-  attached. A production version would layer on a stochastic path model.
-- Execution risk is modelled as a fixed per-strategy discount, not derived from
-  live mempool conditions.
-- No interest accrual, so a position's Health Factor only moves when the price
-  does.
-- The frontend bundle is a single 648 kB chunk (194 kB gzipped) — Recharts
-  dominates it. Code-splitting was not worth the complexity at this size.
-- `npm run lint` reports four warnings: three `set-state-in-effect` from the
-  props-to-draft sync in the form pages, and one `only-export-components` for
-  the `useShield` hook. Both patterns are intentional and contained.
-- The demo replays the backend's trace on a fixed 750 ms beat rather than
-  streaming stages as they complete. A production version would stream over
-  SSE or a WebSocket; the response shape already supports it. The pacing is
-  skipped entirely in a background tab, where browsers clamp timers hard enough
-  to freeze the walk mid-rescue.
+### 2. Position Read
 
----
+Replace the demo `Position` construction with Aave's `getUserAccountData`.
 
-## Troubleshooting
+The protocol's Health Factor can then be used instead of the locally calculated value while keeping the rest of the engine interface unchanged.
 
-**"Protection service unreachable"** — the backend is not running, or is on a
-different port. Check <http://localhost:8001/api/health>.
+### 3. Gas Oracle
 
-**`pip install` fails building `pydantic-core`** — you are on Python 3.14 with
-a pinned pydantic older than 2.12. `requirements.txt` already pins 2.13.4;
-if you edited it, keep pydantic at 2.12 or newer.
+Replace `estimate_gas_cost` with a real EIP-1559 gas-fee estimate.
 
-**Health says `"persistence": "in-memory"` with Supabase configured** — the
-credentials are missing or the project is unreachable. The backend logs a
-warning at startup and falls back rather than failing; check the console.
+This would allow the system to calculate transaction costs using current network conditions.
+
+### 4. DEX Quoter
+
+Replace:
+
+- `estimate_slippage_pct`
+- `has_sufficient_liquidity`
+
+with real Uniswap v3 Quoter calls and live pool-depth information.
+
+This would provide more accurate estimates of slippage and liquidity. The current constant-product model is only a stand-in for real tick-based liquidity.
+
+### 5. Protection Smart Contract
+
+Introduce a smart contract capable of:
+
+1. Taking a flash loan
+2. Repaying the user's debt
+3. Withdrawing and swapping collateral when required
+4. Rebalancing the position
+5. Repaying the flash loan atomically
+
+The existing `strategy_engine.apply_strategy` function provides the logical call site for this execution layer.
+
+### 6. Signing and Transaction Submission
+
+Add a secure keeper wallet or session-key mechanism with an appropriate spending limit.
+
+Transactions could then be submitted through a private mempool to reduce the risk of front-running during a protection operation.
+
+### 7. Continuous Monitoring
+
+The current agent evaluates the position when requested.
+
+A production deployment would use a continuously running, block-subscribed worker that monitors the position and triggers evaluation when the Health Factor reaches the configured intervention threshold.
+
+### Architecture Compatibility
+
+Steps 1–4 are isolated behind existing interfaces and therefore do not require changes to the core risk and strategy engines.
+
+Steps 5–7 introduce new infrastructure required for real on-chain execution and continuous monitoring rather than requiring a complete rewrite of the existing system.
 
 ---
 
-## Licence
+## ⚠️ Known Limitations
 
-[MIT](LICENSE). See [SECURITY.md](SECURITY.md) for how credentials are handled
-and what the CI pipeline checks.
+- **Not investment advice and not audited.** This is a hackathon MVP.
 
-## Pipeline
+- The demo position lives in browser memory. A page reload resets it to the seed position. Only executed rescues persist.
 
-`.github/workflows/ci.yml` runs on every push and pull request:
+- The system currently supports a single position and a single user. There is no authentication layer, and the backend writes using a fixed demo user ID.
 
-- **Backend** — installs `backend/requirements.txt`, runs the full `pytest`
-  suite, and verifies the FastAPI app imports cleanly.
-- **Frontend** — `npm ci`, lint, production build.
-- **Security** — a blocking secret scan (committed `.env`, populated service
-  keys, private keys, Supabase JWTs) plus non-blocking `pip-audit` and
-  `npm audit` dependency advisories.
+- The current model supports one collateral asset and one debt asset per position. Real DeFi accounts can contain multiple assets, and a production Health Factor calculation would account for each reserve using its own liquidation threshold.
 
-The split is deliberate: a red light tells you which of the three broke.
+- Only ETH has a live market price in the current implementation. Other assets use the value entered by the user.
+
+- The live ETH price is a spot-market read rather than a protocol oracle value. A real DeFi protocol may use an oracle price, so its Health Factor can differ from the spot-price calculation for a period of time.
+
+- Scenario analysis uses deterministic instantaneous price shocks. The scenarios do not assign probabilities to future price movements. A production version could incorporate stochastic market models.
+
+- Execution risk is currently represented using a fixed per-strategy discount rather than live mempool or network conditions.
+
+- Interest accrual is not currently modeled. Therefore, the Health Factor changes primarily in response to changes in collateral price.
+
+- The frontend bundle is currently a single large chunk. Recharts contributes significantly to the bundle size, and code-splitting has not been prioritized for the hackathon MVP.
+
+- The demo replays the backend execution trace on a fixed 750 ms interval rather than streaming individual stages as they complete. A production implementation could use Server-Sent Events (SSE) or WebSockets.
+
+---
+
+## 🛠️ Troubleshooting
+
+### "Protection service unreachable"
+
+The backend is not running or is running on a different port.
+
+Check the backend health endpoint:
+
+```text
+http://localhost:8001/api/health
+
+
+
