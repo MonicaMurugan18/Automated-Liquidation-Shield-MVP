@@ -2,22 +2,6 @@
 
 **Autonomous, scenario-driven liquidation protection for a DeFi lending position.**
 
-<!-- TEAM:START -->
-## Team
-
-| | |
-| --- | --- |
-| **Team name** | VentureX |
-| **Institution** | Manakula vinayagar institute of technology |
-| **Problem statement / track** | Problem Statement No. 11 – Automated Liquidation Shield / Autonomous DeFi Liquidation Protection|
-
-| Name | Role |
-| --- | --- |
-| Monica.M | Team Leader |
-| Lakshana.G | Member |
-| Lakshitha | Member |
-<!-- TEAM:END -->
-
 ## At a glance
 
 | | |
