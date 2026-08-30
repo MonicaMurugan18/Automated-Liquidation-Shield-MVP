@@ -80,10 +80,15 @@ export default function Dashboard() {
     collateralSpec,
   } = useShield()
 
+  // Every hook must run on every render, so this sits ABOVE the early return
+  // below. Placing it after the guard meant it was skipped whenever the
+  // dashboard bailed out for missing data, and React's hook order broke on the
+  // very next render that did have data.
+  const [chosenStrategy, setChosenStrategy] = useState('')
+
   if (!assessment || !bands) return null
 
   const state = lookupState(shieldState)
-  const [chosenStrategy, setChosenStrategy] = useState('')
   const viableCount = strategies.filter(
     (s) => s.is_executable ?? s.status === 'VIABLE',
   ).length
